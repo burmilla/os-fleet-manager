@@ -69,7 +69,12 @@ type SSH struct {
 }
 
 type Swarm struct {
-	Settings     `yaml:",inline"`
+	Settings `yaml:",inline"`
+	// Standalone marks a group of servers which are not members of a
+	// Docker Swarm. It has environments, htpasswd, delegation and
+	// maintenance slots like a Swarm, but the health check before and after
+	// maintenance only looks at the server itself.
+	Standalone   bool                   `yaml:"standalone,omitempty"`
 	Environments map[string]Environment `yaml:"environments,omitempty"`
 }
 
@@ -233,6 +238,7 @@ type Desired struct {
 	Swarm                      string             `json:"swarm"`
 	Environment                string             `json:"environment"`
 	Known                      bool               `json:"known"`
+	Standalone                 bool               `json:"standalone"`
 	OSImage                    string             `json:"os_image"`
 	OSVersion                  string             `json:"os_version"`
 	DockerVersion              string             `json:"docker_version"`
@@ -407,6 +413,7 @@ func (c *Config) Resolve(hostname, swarm, environment string, now time.Time) Des
 		Swarm:                    swarm,
 		Environment:              environment,
 		Known:                    known,
+		Standalone:               c.Swarms[swarm].Standalone,
 		OSImage:                  s.OSImage,
 		OSVersion:                s.OSVersion,
 		DockerVersion:            s.DockerVersion,

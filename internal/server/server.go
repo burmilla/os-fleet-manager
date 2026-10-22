@@ -309,7 +309,7 @@ func (s *Server) swarmHealth() []SwarmHealth {
 	now := s.Now()
 	names := map[string]bool{}
 	for _, st := range s.statuses() {
-		if st.Desired.Swarm != "" {
+		if st.Desired.Swarm != "" && !st.Desired.Standalone {
 			names[st.Desired.Swarm] = true
 		}
 	}

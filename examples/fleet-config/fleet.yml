@@ -40,6 +40,8 @@ defaults:
 delegation:
   swarm-a:
     servers: ["swarm-a-*"]
+  edge:
+    servers: ["edge-*"]
 
 servers:
   legacy-01:

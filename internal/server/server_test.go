@@ -489,3 +489,47 @@ func TestLocalContainersInSwarm(t *testing.T) {
 		t.Fatalf("a broken container on another node must block: %v %s", ok, msg)
 	}
 }
+
+func TestStandaloneGroup(t *testing.T) {
+	e := newEnv(t)
+	cfg, err := fleet.Parse([]byte(`
+defaults: {max_uptime: 30d}
+swarms:
+  edge:
+    standalone: true
+    environments:
+      prod: {max_concurrent_maintenance: 1}
+servers:
+  e1: {swarm: edge, environment: prod}
+  e2: {swarm: edge, environment: prod}
+  e3: {swarm: edge, environment: prod}
+`))
+	if err != nil {
+		t.Fatal(err)
+	}
+	e.s.SetConfig(cfg)
+	boot := e.now.Add(-40 * 24 * time.Hour)
+	broken := &ContainerStatus{Containers: 1, ContainersNotReady: []ContainerState{{Name: "app", State: "restarting"}}}
+	// No Swarm status at all: standalone servers are not Swarm members.
+	e.post("/api/v1/report", Report{Hostname: "e1", BootTime: boot})
+	_, body := e.post("/api/v1/report", Report{Hostname: "e2", BootTime: boot, Containers: broken})
+	var d fleet.Desired
+	_ = json.Unmarshal(body, &d)
+	if !d.Standalone {
+		t.Fatalf("standalone expected: %s", body)
+	}
+
+	if ok, msg := e.lock("e1"); !ok {
+		t.Fatalf("other servers of a standalone group do not block: %s", msg)
+	}
+	if ok, msg := e.lock("e3"); ok || msg != "1 of 1 maintenance slots in use" {
+		t.Fatalf("max_concurrent_maintenance still applies: %v %s", ok, msg)
+	}
+	e.s.Store.Release("e1")
+	if ok, msg := e.lock("e2"); ok || msg != "container app on e2 is restarting" {
+		t.Fatalf("own containers block: %v %s", ok, msg)
+	}
+	if strings.Contains(string(e.get("/api/v1/swarms")), "edge") {
+		t.Fatal("standalone groups are not Swarms")
+	}
+}

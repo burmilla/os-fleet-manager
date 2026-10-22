@@ -55,6 +55,13 @@ inherited `defaults` < `swarms.<swarm>` < `swarms.<swarm>.environments.<env>`
 A `servers:` entry can also set `swarm` and `environment`, which then win
 over what the client was configured with.
 
+Servers which are not members of a Docker Swarm can be grouped with a
+`standalone: true` entry under `swarms:` (clients use `FLEET_SWARM=<group>`).
+Such a group has environments, `htpasswd`, delegation and maintenance slots
+like a Swarm, but before and after maintenance only the server itself is
+checked (its local containers), not the other members. Servers without any
+Swarm or group only get the defaults and `servers:` entries of `fleet.yml`.
+
 ### Splitting the configuration per team
 
 Swarms can be kept in their own files next to `fleet.yml`, so the parts can

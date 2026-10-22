@@ -38,6 +38,7 @@ Response `200`:
   "swarm": "swarm-a",
   "environment": "production",
   "known": true,
+  "standalone": false,
   "os_image": "burmilla/os",
   "os_version": "v3.0.0",
   "docker_version": "docker-29.9.2",
@@ -69,6 +70,8 @@ Response `200`:
 ```
 
 * `known` is `true` when the hostname is listed under `servers:`.
+* `standalone` is `true` when `swarm` is a group of servers outside of a
+  Docker Swarm (`standalone: true`); only the server itself is health checked.
 * `os_version` is the tag of `os_image` (`ros os upgrade -i <os_image>:<os_version>`).
   Empty means "do not manage the OS version".
 * `docker_version` is a User Docker engine name as listed by `ros engine list`

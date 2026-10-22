@@ -6,3 +6,5 @@
 /swarms/swarm-a.yml             @example-org/team-a
 /swarms/swarm-a/                @example-org/team-a
 /swarms/swarm-a/production.yml  @example-org/production-ops
+/swarms/edge.yml                @example-org/edge
+/swarms/edge/                   @example-org/edge

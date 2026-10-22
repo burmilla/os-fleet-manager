@@ -162,7 +162,7 @@ func localProblem(hostname string, records map[string]record) error {
 
 // canStartMaintenance decides if hostname may take a maintenance lock.
 func (s *Server) canStartMaintenance(cfg *fleet.Config, d fleet.Desired, hostname string, locks map[string]Lock, records map[string]record, now time.Time) error {
-	if d.Swarm == "" {
+	if d.Swarm == "" || d.Standalone {
 		return localProblem(hostname, records)
 	}
 	ignore := map[string]bool{}
@@ -196,7 +196,7 @@ func (s *Server) canStartMaintenance(cfg *fleet.Config, d fleet.Desired, hostnam
 // the server must be back in the Swarm and the whole Swarm healthy, and
 // its local containers ready.
 func (s *Server) canFinishMaintenance(cfg *fleet.Config, d fleet.Desired, hostname string, now time.Time) error {
-	if d.Swarm == "" {
+	if d.Swarm == "" || d.Standalone {
 		return localProblem(hostname, s.Store.Records())
 	}
 	ignore := map[string]bool{}
