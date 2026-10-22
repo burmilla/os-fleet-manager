@@ -55,6 +55,38 @@ inherited `defaults` < `swarms.<swarm>` < `swarms.<swarm>.environments.<env>`
 A `servers:` entry can also set `swarm` and `environment`, which then win
 over what the client was configured with.
 
+### Splitting the configuration per team
+
+Swarms can be kept in their own files next to `fleet.yml`, so the parts can
+be delegated to different teams with CODEOWNERS (GitHub) or path-based
+required reviewers (Azure DevOps) and branch protection:
+
+```
+fleet.yml                          defaults and anything not delegated (platform team)
+swarms/swarm-a.yml                 Swarm settings, environments and servers (team A)
+swarms/swarm-a/production.yml      one environment and its servers (e.g. production ops)
+```
+
+* `swarms/<swarm>.yml` has the same fields as a `swarms.<swarm>` entry plus
+  `servers:`; those servers belong to that Swarm.
+* `swarms/<swarm>/<environment>.yml` has the fields of an environment
+  (including `htpasswd`) plus `servers:`; those servers belong to that Swarm
+  environment.
+* A file cannot move a server to another Swarm or environment, and a Swarm,
+  environment or server may be defined only once across all files, so one
+  team cannot override what another team's file defines.
+* Protect environments with `htpasswd`: a server then only accepts
+  configuration from the environment it has credentials for, even if another
+  team's file lists its hostname.
+* If any file is invalid, Fleet Manager keeps serving the previous
+  configuration (`burmilla_fleet_config_sync_success` is 0). Run
+  `fleet-manager validate fleet.yml` in CI of the configuration repository
+  so broken changes are caught before merge.
+
+See [examples/fleet-config](examples/fleet-config) for a split configuration
+with [CODEOWNERS](examples/fleet-config/CODEOWNERS) and a
+[validation workflow](examples/fleet-config/.github/workflows/validate.yml).
+
 ### SSH access
 
 fleet-client applies `ssh` settings on every check-in, without a maintenance
@@ -166,7 +198,7 @@ granted once it has been written to disk.
 | `FLEET_GIT_TOKEN`      |              | Personal access token (read-only access to the repository is enough) |
 | `FLEET_GIT_TOKEN_FILE` |              | Read the token from a file, e.g. a Docker secret |
 | `FLEET_GIT_USERNAME`   | `git`        | User name sent with the token |
-| `FLEET_CONFIG_FILE`    | `fleet.yml`  | Path of the configuration inside the repository |
+| `FLEET_CONFIG_FILE`    | `fleet.yml`  | Path of the configuration inside the repository; the `swarms` directory is read next to it |
 | `FLEET_CONFIG_DIR`     |              | Use a local directory instead of Git |
 | `FLEET_SYNC_INTERVAL`  | `1m`         | How often the repository is fetched |
 | `FLEET_LOCK_TTL`       | `30m`        | Maintenance lock lifetime |

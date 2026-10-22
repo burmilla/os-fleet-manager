@@ -4,8 +4,12 @@
 package fleet
 
 import (
+	"bytes"
+	"errors"
 	"fmt"
+	"io"
 	"os"
+	"path/filepath"
 	"slices"
 	"strings"
 	"time"
@@ -93,20 +97,39 @@ type Config struct {
 	Revision string `yaml:"-"`
 }
 
-// Load reads and validates a fleet configuration file.
+// Load reads a fleet configuration file together with the Swarm files in
+// the swarms directory next to it, and validates the result.
 func Load(path string) (*Config, error) {
 	data, err := os.ReadFile(path)
 	if err != nil {
 		return nil, err
 	}
-	return Parse(data)
+	cfg := &Config{}
+	if err := decode(data, cfg); err != nil {
+		return nil, fmt.Errorf("%s: %w", filepath.Base(path), err)
+	}
+	if err := cfg.loadSwarmDir(filepath.Join(filepath.Dir(path), SwarmDir)); err != nil {
+		return nil, err
+	}
+	if err := cfg.Validate(); err != nil {
+		return nil, err
+	}
+	return cfg, nil
+}
+
+// decode parses YAML strictly; an empty document is valid.
+func decode(data []byte, v any) error {
+	dec := yaml.NewDecoder(bytes.NewReader(data))
+	dec.KnownFields(true)
+	if err := dec.Decode(v); err != nil && !errors.Is(err, io.EOF) {
+		return err
+	}
+	return nil
 }
 
 func Parse(data []byte) (*Config, error) {
 	cfg := &Config{}
-	dec := yaml.NewDecoder(strings.NewReader(string(data)))
-	dec.KnownFields(true)
-	if err := dec.Decode(cfg); err != nil {
+	if err := decode(data, cfg); err != nil {
 		return nil, fmt.Errorf("parse fleet config: %w", err)
 	}
 	if err := cfg.Validate(); err != nil {

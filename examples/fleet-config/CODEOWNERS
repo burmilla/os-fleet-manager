@@ -1,0 +1,8 @@
+# Delegate parts of the fleet configuration (GitHub: .github/CODEOWNERS or
+# CODEOWNERS in the root; Azure DevOps: required reviewers per path in the
+# branch policy). Combine with branch protection that requires a code owner
+# review and the validate workflow.
+*                               @example-org/platform
+/swarms/swarm-a.yml             @example-org/team-a
+/swarms/swarm-a/                @example-org/team-a
+/swarms/swarm-a/production.yml  @example-org/production-ops
