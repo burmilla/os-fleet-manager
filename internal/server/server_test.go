@@ -400,3 +400,42 @@ swarms:
 		t.Fatal("duplicate htpasswd user must be rejected")
 	}
 }
+
+func TestSSHStatus(t *testing.T) {
+	e := newEnv(t)
+	key := "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIOiuTuZpapVCjAUUGcXj2zMLBbrr0QyMsca1UEx+EBWQ alice@example.com"
+	cfg, err := fleet.Parse([]byte("defaults: {ssh: {authorized_keys: [\"" + key + "\"], password_authentication: false}}"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	e.s.SetConfig(cfg)
+
+	var d fleet.Desired
+	_ = json.Unmarshal(e.get("/api/v1/config?hostname=solo"), &d)
+	if len(d.SSH.AuthorizedKeys) != 1 || d.SSH.PasswordAuthentication == nil || *d.SSH.PasswordAuthentication {
+		t.Fatalf("unexpected ssh config: %+v", d.SSH)
+	}
+
+	on := true
+	_, body := e.post("/api/v1/report", Report{Hostname: "solo", SSH: &fleet.SSH{AuthorizedKeys: []string{key}, PasswordAuthentication: &on}})
+	_ = json.Unmarshal(body, &d)
+	if d.SSHInSync {
+		t.Fatal("password authentication is still on")
+	}
+	metrics := string(e.get("/metrics"))
+	for _, want := range []string{
+		`burmilla_fleet_server_ssh_in_sync{hostname="solo",swarm="",environment=""} 0`,
+		`burmilla_fleet_server_ssh_password_authentication{hostname="solo",swarm="",environment=""} 1`,
+	} {
+		if !strings.Contains(metrics, want) {
+			t.Fatalf("missing %s in\n%s", want, metrics)
+		}
+	}
+
+	off := false
+	_, body = e.post("/api/v1/report", Report{Hostname: "solo", SSH: &fleet.SSH{AuthorizedKeys: []string{key}, PasswordAuthentication: &off}})
+	_ = json.Unmarshal(body, &d)
+	if !d.SSHInSync {
+		t.Fatalf("should be in sync: %s", body)
+	}
+}

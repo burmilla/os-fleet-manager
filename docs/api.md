@@ -55,7 +55,12 @@ Response `200`:
   "max_concurrent_maintenance": 1,
   "max_uptime_seconds": 7776000,
   "restart_after": "",
+  "ssh": {
+    "authorized_keys": ["ssh-ed25519 AAAA... alice@example.com"],
+    "password_authentication": false
+  },
   "config_revision": "3f2c1a9...",
+  "ssh_in_sync": true,
   "restart_required": false,
   "maintenance_required": true,
   "maintenance_reasons": ["os_upgrade"]
@@ -80,6 +85,11 @@ Response `200`:
   report of the server. A restart is due when the server has been up longer
   than `max_uptime_seconds`, or when it booted before `restart_after` (a
   one-off restart request) and that time has passed.
+* `ssh.authorized_keys` is the complete list of keys the client manages for
+  the `rancher` and `docker` users; `null` means "do not manage keys" and `[]`
+  removes all managed keys. `ssh.password_authentication` is `null` when not
+  managed. SSH settings are applied right away, without a maintenance lock.
+* `ssh_in_sync` tells whether the SSH state of the last report matches `ssh`.
 
 `400` if `hostname` is missing. `503` if no configuration has been loaded yet.
 
@@ -113,6 +123,10 @@ Clients report their current state. Body:
     "services_not_ready": [
       {"name": "web", "mode": "replicated", "desired_tasks": 3, "running_tasks": 2, "update_state": ""}
     ]
+  },
+  "ssh": {
+    "authorized_keys": ["ssh-ed25519 AAAA... alice@example.com"],
+    "password_authentication": false
   }
 }
 ```
@@ -124,6 +138,10 @@ A service is ready when it runs all desired tasks (Swarm reports a task with
 a health check as running only once it is healthy) and no update is in
 progress (`updating`, `paused`, `rollback_started`, `rollback_paused`), i.e.
 all tasks run the target configuration. Jobs are skipped.
+
+`ssh` is the applied SSH state: the keys in the block managed by the client
+(`null` when it does not manage keys) and whether sshd accepts passwords
+(`sshd -T`). It is omitted when the client could not read it.
 
 `state` is one of `idle`, `downloading`, `upgrading`, `waiting`, `error`
 (free text is accepted, these are the values the bundled client sends).

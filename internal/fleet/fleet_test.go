@@ -1,6 +1,7 @@
 package fleet
 
 import (
+	"slices"
 	"testing"
 	"time"
 )
@@ -129,5 +130,65 @@ servers:
 	}
 	if _, err := ParseDuration("1.5d"); err == nil {
 		t.Fatal("fractional days should be rejected")
+	}
+}
+
+func TestSSHSettings(t *testing.T) {
+	cfg, err := Load("../../examples/fleet-config/fleet.yml")
+	if err != nil {
+		t.Fatal(err)
+	}
+	now := time.Now()
+
+	prod := cfg.Resolve("swarm-a-mgr-01", "", "", now)
+	if len(prod.SSH.AuthorizedKeys) != 2 || prod.SSH.PasswordAuthentication == nil || *prod.SSH.PasswordAuthentication {
+		t.Fatalf("production should inherit keys and disable passwords: %+v", prod.SSH)
+	}
+	test := cfg.Resolve("worker-17", "swarm-a", "test", now)
+	if len(test.SSH.AuthorizedKeys) != 3 || !*test.SSH.PasswordAuthentication {
+		t.Fatalf("test should replace keys and allow passwords: %+v", test.SSH)
+	}
+	if d := cfg.Resolve("standalone", "", "", now); d.SSH.PasswordAuthentication != nil {
+		t.Fatalf("password authentication is not managed by default: %+v", d.SSH)
+	}
+
+	off, on := false, true
+	keys := slices.Clone(prod.SSH.AuthorizedKeys)
+	slices.Reverse(keys)
+	prod.CheckSSH(&SSH{AuthorizedKeys: keys, PasswordAuthentication: &off})
+	if !prod.SSHInSync {
+		t.Fatal("key order must not matter")
+	}
+	prod.CheckSSH(&SSH{AuthorizedKeys: keys, PasswordAuthentication: &on})
+	if prod.SSHInSync {
+		t.Fatal("password authentication differs")
+	}
+	prod.CheckSSH(&SSH{AuthorizedKeys: keys[:1], PasswordAuthentication: &off})
+	if prod.SSHInSync {
+		t.Fatal("a key is missing")
+	}
+	prod.CheckSSH(nil)
+	if prod.SSHInSync {
+		t.Fatal("client did not report SSH state")
+	}
+
+	// An empty list removes all managed keys, which differs from unset.
+	cfg, err = Parse([]byte("defaults: {ssh: {authorized_keys: []}}"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if d := cfg.Resolve("x", "", "", now); d.SSH.AuthorizedKeys == nil || len(d.SSH.AuthorizedKeys) != 0 {
+		t.Fatalf("empty key list must be kept: %#v", d.SSH)
+	}
+}
+
+func TestInvalidSSHKey(t *testing.T) {
+	for _, c := range []string{
+		"defaults: {ssh: {authorized_keys: [not-a-key]}}",
+		"defaults: {ssh: {authorized_keys: [\"ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIOiuTuZpapVCjAUUGcXj2zMLBbrr0QyMsca1UEx+EBWQ a\\nssh-rsa x\"]}}",
+	} {
+		if _, err := Parse([]byte(c)); err == nil {
+			t.Fatalf("expected error for %s", c)
+		}
 	}
 }

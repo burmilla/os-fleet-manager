@@ -6,9 +6,11 @@ package fleet
 import (
 	"fmt"
 	"os"
+	"slices"
 	"strings"
 	"time"
 
+	"golang.org/x/crypto/ssh"
 	"gopkg.in/yaml.v3"
 )
 
@@ -41,6 +43,19 @@ type Settings struct {
 	// RestartAfter requests a one-off restart: servers booted before this
 	// time (RFC 3339) restart in their next maintenance window.
 	RestartAfter string `yaml:"restart_after,omitempty"`
+	// SSH access of the rancher and docker users. Changes are applied by
+	// fleet-client right away, they do not need a maintenance lock.
+	SSH *SSH `yaml:"ssh,omitempty"`
+}
+
+// SSH settings. Unset fields are not managed by fleet-client.
+type SSH struct {
+	// AuthorizedKeys replaces the keys which fleet-client manages in
+	// authorized_keys. Keys added by other means (cloud-config, by hand)
+	// are left alone. An empty list removes all managed keys.
+	AuthorizedKeys []string `yaml:"authorized_keys" json:"authorized_keys"`
+	// PasswordAuthentication enables or disables password logins in sshd.
+	PasswordAuthentication *bool `yaml:"password_authentication,omitempty" json:"password_authentication"`
 }
 
 type Swarm struct {
@@ -123,6 +138,16 @@ func (c *Config) Validate() error {
 		if s.DockerVersion != "" && !strings.HasPrefix(s.DockerVersion, "docker-") {
 			return fmt.Errorf("%s: docker_version %q must be an engine name like docker-29.9.2", where, s.DockerVersion)
 		}
+		if s.SSH != nil {
+			for _, key := range s.SSH.AuthorizedKeys {
+				if strings.ContainsAny(key, "\r\n") {
+					return fmt.Errorf("%s: ssh.authorized_keys entries must be single lines", where)
+				}
+				if _, _, _, _, err := ssh.ParseAuthorizedKey([]byte(key)); err != nil {
+					return fmt.Errorf("%s: invalid ssh.authorized_keys entry %q: %w", where, key, err)
+				}
+			}
+		}
 		if s.MaintenanceWindow != nil {
 			if err := s.MaintenanceWindow.Validate(); err != nil {
 				return fmt.Errorf("%s: maintenance_window: %w", where, err)
@@ -183,9 +208,11 @@ type Desired struct {
 	MaxConcurrentMaintenance   int                `json:"max_concurrent_maintenance"`
 	MaxUptimeSeconds           int64              `json:"max_uptime_seconds"`
 	RestartAfter               string             `json:"restart_after"`
+	SSH                        SSH                `json:"ssh"`
 	ConfigRevision             string             `json:"config_revision"`
 
 	// Filled in from the last report of the server.
+	SSHInSync           bool     `json:"ssh_in_sync"`
 	RestartRequired     bool     `json:"restart_required"`
 	MaintenanceRequired bool     `json:"maintenance_required"`
 	MaintenanceReasons  []string `json:"maintenance_reasons"`
@@ -219,6 +246,33 @@ func (d *Desired) Evaluate(osVersion, dockerVersion string, bootTime, now time.T
 		d.MaintenanceReasons = append(d.MaintenanceReasons, ReasonRestart)
 	}
 	d.MaintenanceRequired = len(d.MaintenanceReasons) > 0
+}
+
+// CheckSSH compares the SSH state reported by the server with the
+// desired one. Settings which are not managed are ignored.
+func (d *Desired) CheckSSH(reported *SSH) {
+	d.SSHInSync = true
+	if d.SSH.AuthorizedKeys != nil {
+		if reported == nil || reported.AuthorizedKeys == nil {
+			d.SSHInSync = false
+		} else {
+			want, got := slices.Clone(d.SSH.AuthorizedKeys), slices.Clone(reported.AuthorizedKeys)
+			for i := range want {
+				want[i] = strings.TrimSpace(want[i])
+			}
+			for i := range got {
+				got[i] = strings.TrimSpace(got[i])
+			}
+			slices.Sort(want)
+			slices.Sort(got)
+			d.SSHInSync = slices.Equal(slices.Compact(want), slices.Compact(got))
+		}
+	}
+	if p := d.SSH.PasswordAuthentication; p != nil {
+		if reported == nil || reported.PasswordAuthentication == nil || *reported.PasswordAuthentication != *p {
+			d.SSHInSync = false
+		}
+	}
 }
 
 // ParseDuration is time.ParseDuration with support for a "d" (days) suffix.
@@ -260,6 +314,19 @@ func merge(dst *Settings, src Settings) {
 	}
 	if src.MaintenanceWindow != nil {
 		dst.MaintenanceWindow = src.MaintenanceWindow
+	}
+	if src.SSH != nil {
+		ssh := SSH{}
+		if dst.SSH != nil {
+			ssh = *dst.SSH
+		}
+		if src.SSH.AuthorizedKeys != nil {
+			ssh.AuthorizedKeys = src.SSH.AuthorizedKeys
+		}
+		if src.SSH.PasswordAuthentication != nil {
+			ssh.PasswordAuthentication = src.SSH.PasswordAuthentication
+		}
+		dst.SSH = &ssh
 	}
 }
 
@@ -310,7 +377,11 @@ func (c *Config) Resolve(hostname, swarm, environment string, now time.Time) Des
 		MaxUptimeSeconds:         int64(maxUptime.Seconds()),
 		RestartAfter:             s.RestartAfter,
 		ConfigRevision:           c.Revision,
+		SSHInSync:                true,
 		MaintenanceReasons:       []string{},
+	}
+	if s.SSH != nil {
+		d.SSH = *s.SSH
 	}
 	if w := s.MaintenanceWindow; w != nil {
 		if end, ok := w.ActiveUntil(now); ok {

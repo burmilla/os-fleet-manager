@@ -9,6 +9,8 @@ import (
 	"sort"
 	"sync"
 	"time"
+
+	"github.com/burmilla/os-fleet-manager/internal/fleet"
 )
 
 // SwarmStatus is the Docker Swarm state as seen by the reporting server.
@@ -50,6 +52,9 @@ type Report struct {
 	State         string       `json:"state"`
 	Message       string       `json:"message"`
 	SwarmStatus   *SwarmStatus `json:"swarm_status,omitempty"`
+	// SSH is the applied state: the keys managed by fleet-client and
+	// whether sshd accepts passwords.
+	SSH *fleet.SSH `json:"ssh,omitempty"`
 }
 
 type record struct {
