@@ -1,0 +1,55 @@
+# Example fleet configuration. Put this file to the root of a private Git
+# repository (GitHub or Azure DevOps) and point FLEET_GIT_URL to it.
+#
+# Settings are inherited: defaults < swarm < swarm environment < server.
+
+defaults:
+  os_image: burmilla/os            # use your registry mirror here if needed
+  os_version: v3.0.0               # tag of os_image
+  docker_version: docker-29.9.2    # engine name from `ros engine list`
+  upgrade_policy: download         # auto | download | none
+  max_concurrent_maintenance: 1    # per Swarm + Environment
+  check_interval: 5m
+  max_uptime: 90d                  # scheduled restart when uptime exceeds this
+  maintenance_window:
+    days: [sat, sun]
+    start: "02:00"
+    duration: 3h
+    timezone: Europe/Helsinki
+
+swarms:
+  swarm-a:
+    upgrade_policy: auto
+    environments:
+      test:
+        os_version: v3.0.1
+        docker_version: docker-29.9.2
+        max_concurrent_maintenance: 2
+      production:
+        os_version: v3.0.0
+        docker_version: docker-29.9.1
+        # Servers of swarm-a production must authenticate with this user
+        # (FLEET_USERNAME / FLEET_PASSWORD in fleet-client). Create entries
+        # with: htpasswd -nbB swarm-a-production 'password'
+        # htpasswd:
+        #   - "swarm-a-production:$2y$05$..."
+        # One-off restart of every server in swarm-a production which has
+        # not been restarted since this time, in their maintenance windows.
+        # restart_after: "2026-10-24T00:00:00Z"
+
+servers:
+  # Managers get their own windows so they never restart at the same time.
+  swarm-a-mgr-01:
+    swarm: swarm-a
+    environment: production
+    maintenance_window: {days: [sat], start: "02:00", duration: 1h, timezone: Europe/Helsinki}
+  swarm-a-mgr-02:
+    swarm: swarm-a
+    environment: production
+    maintenance_window: {days: [sat], start: "03:00", duration: 1h, timezone: Europe/Helsinki}
+  swarm-a-mgr-03:
+    swarm: swarm-a
+    environment: production
+    maintenance_window: {days: [sat], start: "04:00", duration: 1h, timezone: Europe/Helsinki}
+  legacy-01:
+    upgrade_policy: none           # pinned, report only
