@@ -78,7 +78,10 @@ docker run -d --name fleet-manager -p 8080:8080 -v fleet-data:/data \
 ```
 
 For Docker Swarm see [deploy/docker-stack.yml](deploy/docker-stack.yml).
-Run a **single replica**: maintenance locks are kept in memory.
+Run a **single replica** with a persistent `/data` volume: the last reports
+and the maintenance locks are stored there (`reports.json`, `locks.json`), so
+a restart or a reschedule of the service keeps the locks. A lock is only
+granted once it has been written to disk.
 
 | Variable               | Default      | Description |
 |------------------------|--------------|-------------|
@@ -91,7 +94,7 @@ Run a **single replica**: maintenance locks are kept in memory.
 | `FLEET_CONFIG_DIR`     |              | Use a local directory instead of Git |
 | `FLEET_SYNC_INTERVAL`  | `1m`         | How often the repository is fetched |
 | `FLEET_LOCK_TTL`       | `30m`        | Maintenance lock lifetime |
-| `FLEET_DATA_DIR`       | `/data`      | Repository checkout and last reports |
+| `FLEET_DATA_DIR`       | `/data`      | Repository checkout, last reports and maintenance locks |
 | `FLEET_LISTEN`         | `:8080`      | Listen address |
 
 Tokens:

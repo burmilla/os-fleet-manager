@@ -18,7 +18,7 @@ services:
     volumes:
       - fleet-data:/data
     deploy:
-      replicas: 1   # upgrade locks are kept in memory, run a single replica
+      replicas: 1   # singleton; reports and maintenance locks live in /data
       placement:
         constraints: [node.role == manager]
 

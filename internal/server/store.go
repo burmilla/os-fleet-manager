@@ -3,6 +3,7 @@ package server
 import (
 	"encoding/json"
 	"fmt"
+	"log"
 	"os"
 	"path/filepath"
 	"sort"
@@ -59,20 +60,21 @@ type record struct {
 
 // Lock is a maintenance lock held by a server.
 type Lock struct {
-	Group   string
-	Reason  string
-	Expires time.Time
+	Group   string    `json:"group"`
+	Reason  string    `json:"reason"`
+	Expires time.Time `json:"expires"`
 }
 
 // Store keeps the last report of each server and the maintenance locks.
-// Reports are persisted to a JSON file so they survive restarts; locks are
-// in memory only and expire on their own.
+// Both are persisted to JSON files in the data directory so that they
+// survive a restart of the service.
 type Store struct {
-	mu      sync.Mutex
-	path    string
-	records map[string]*record
-	locks   map[string]Lock // hostname -> lock
-	lockTTL time.Duration
+	mu        sync.Mutex
+	path      string
+	locksPath string
+	records   map[string]*record
+	locks     map[string]Lock // hostname -> lock
+	lockTTL   time.Duration
 }
 
 func NewStore(dataDir string, lockTTL time.Duration) *Store {
@@ -83,26 +85,59 @@ func NewStore(dataDir string, lockTTL time.Duration) *Store {
 	}
 	if dataDir != "" {
 		s.path = filepath.Join(dataDir, "reports.json")
-		if data, err := os.ReadFile(s.path); err == nil {
-			_ = json.Unmarshal(data, &s.records)
+		s.locksPath = filepath.Join(dataDir, "locks.json")
+		load(s.path, &s.records)
+		load(s.locksPath, &s.locks)
+		if s.records == nil {
+			s.records = map[string]*record{}
+		}
+		if s.locks == nil {
+			s.locks = map[string]Lock{}
 		}
 	}
 	return s
 }
 
-func (s *Store) saveLocked() error {
-	if s.path == "" {
+func load(path string, v any) {
+	data, err := os.ReadFile(path)
+	if err != nil {
+		return
+	}
+	if err := json.Unmarshal(data, v); err != nil {
+		log.Printf("ignoring unreadable %s: %v", path, err)
+	}
+}
+
+// save writes v atomically: a crash leaves either the old or the new file.
+func save(path string, v any) error {
+	if path == "" {
 		return nil
 	}
-	data, err := json.Marshal(s.records)
+	data, err := json.Marshal(v)
 	if err != nil {
 		return err
 	}
-	tmp := s.path + ".tmp"
-	if err := os.WriteFile(tmp, data, 0o644); err != nil {
+	tmp := path + ".tmp"
+	f, err := os.Create(tmp)
+	if err != nil {
 		return err
 	}
-	return os.Rename(tmp, s.path)
+	if _, err := f.Write(data); err != nil {
+		f.Close()
+		return err
+	}
+	if err := f.Sync(); err != nil {
+		f.Close()
+		return err
+	}
+	if err := f.Close(); err != nil {
+		return err
+	}
+	return os.Rename(tmp, path)
+}
+
+func (s *Store) saveLocked() error {
+	return save(s.path, s.records)
 }
 
 func (s *Store) Put(r Report, remoteAddr string, now time.Time) error {
@@ -159,7 +194,17 @@ func (s *Store) Acquire(hostname, group, reason string, max int, now time.Time, 
 		}
 	}
 	expires := now.Add(s.lockTTL)
+	prev, had := s.locks[hostname]
 	s.locks[hostname] = Lock{Group: group, Reason: reason, Expires: expires}
+	if err := save(s.locksPath, s.locks); err != nil {
+		// A lock that would be lost on restart is not granted.
+		if had {
+			s.locks[hostname] = prev
+		} else {
+			delete(s.locks, hostname)
+		}
+		return time.Time{}, holders, fmt.Errorf("persist maintenance lock: %w", err)
+	}
 	return expires, s.holdersLocked(group), nil
 }
 
@@ -186,8 +231,14 @@ func (s *Store) Release(hostname string) bool {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	_, ok := s.locks[hostname]
+	if !ok {
+		return false
+	}
 	delete(s.locks, hostname)
-	return ok
+	if err := save(s.locksPath, s.locks); err != nil {
+		log.Printf("failed to persist maintenance locks: %v", err)
+	}
+	return true
 }
 
 // Locks returns the current locks by hostname.

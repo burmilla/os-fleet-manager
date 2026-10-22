@@ -6,6 +6,8 @@ import (
 	"io"
 	"net/http"
 	"net/http/httptest"
+	"os"
+	"path/filepath"
 	"strings"
 	"testing"
 	"time"
@@ -249,6 +251,46 @@ func TestReportsPersist(t *testing.T) {
 	}
 	if got := NewStore(dir, time.Minute).Records()["a"]; got.Report.OSVersion != "v3.0.0" || got.RemoteAddr != "10.0.0.1" {
 		t.Fatalf("report not persisted: %+v", got)
+	}
+}
+
+func TestLocksPersist(t *testing.T) {
+	dir := t.TempDir()
+	now := time.Now()
+	s := NewStore(dir, time.Hour)
+	if _, _, err := s.Acquire("a", "s1/prod", "os_upgrade", 1, now, nil); err != nil {
+		t.Fatal(err)
+	}
+	if _, _, err := s.Acquire("b", "s1/test", "restart", 1, now, nil); err != nil {
+		t.Fatal(err)
+	}
+	s.Release("b")
+
+	// A restarted service keeps the lock and still refuses the slot.
+	s = NewStore(dir, time.Hour)
+	locks := s.Locks(now)
+	if len(locks) != 1 || locks["a"].Group != "s1/prod" || locks["a"].Reason != "os_upgrade" {
+		t.Fatalf("locks not persisted: %+v", locks)
+	}
+	if _, _, err := s.Acquire("c", "s1/prod", "restart", 1, now, nil); err == nil {
+		t.Fatal("persisted lock must still occupy the slot")
+	}
+	if len(s.Locks(now.Add(2*time.Hour))) != 0 {
+		t.Fatal("persisted lock should still expire")
+	}
+}
+
+func TestLockNotGrantedWhenNotPersisted(t *testing.T) {
+	dir := t.TempDir()
+	s := NewStore(dir, time.Hour)
+	if err := os.Mkdir(filepath.Join(dir, "locks.json.tmp"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if _, _, err := s.Acquire("a", "g", "restart", 1, time.Now(), nil); err == nil {
+		t.Fatal("lock must be refused when it cannot be written")
+	}
+	if len(s.Locks(time.Now())) != 0 {
+		t.Fatal("refused lock must not stay in memory")
 	}
 }
 
