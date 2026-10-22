@@ -25,7 +25,7 @@ func writeFiles(t *testing.T, files map[string]string) string {
 
 func TestSplitFiles(t *testing.T) {
 	path := writeFiles(t, map[string]string{
-		"fleet.yml":          "defaults: {os_version: v3.0.0}\n",
+		"fleet.yml":          "defaults: {os_version: v3.0.0}\ndelegation: {a: {servers: [\"a*\"]}}\n",
 		"swarms/a.yml":       "upgrade_policy: auto\nservers:\n  a1: {environment: prod}\n",
 		"swarms/a/prod.yml":  "os_version: v3.0.1\nservers:\n  a2: {}\n",
 		"swarms/b/test.yaml": "os_version: v3.0.2\n",
@@ -68,14 +68,25 @@ func TestSplitFilesConflicts(t *testing.T) {
 			"swarms/a/prod.yml": "os_version: v3.0.1\n",
 		}, "swarms/a/prod.yml: environment prod of swarm a is already defined"},
 		"server twice": {map[string]string{
-			"fleet.yml":    "servers: {s1: {}}\n",
+			"fleet.yml":    "servers: {s1: {}}\ndelegation: {a: {servers: [\"s*\"]}}\n",
 			"swarms/a.yml": "servers: {s1: {}}\n",
 		}, "swarms/a.yml: server s1 is already defined in fleet.yml"},
 		"server in two teams": {map[string]string{
-			"fleet.yml":    "",
+			"fleet.yml":    "delegation: {a: {servers: [\"s*\"]}, b: {servers: [s1]}}\n",
 			"swarms/a.yml": "servers: {s1: {}}\n",
 			"swarms/b.yml": "servers: {s1: {}}\n",
 		}, "swarms/b.yml: server s1 is already defined in swarms/a.yml"},
+		"not delegated": {map[string]string{
+			"fleet.yml":         "delegation: {a: {servers: [\"a-*\"]}}\n",
+			"swarms/a/prod.yml": "servers: {a-1: {}, b-1: {}}\n",
+		}, "swarms/a/prod.yml: server b-1 is not delegated to swarm a"},
+		"no delegation": {map[string]string{
+			"fleet.yml":    "",
+			"swarms/b.yml": "servers: {b-1: {}}\n",
+		}, "swarms/b.yml: server b-1 is not delegated to swarm b"},
+		"bad pattern": {map[string]string{
+			"fleet.yml": "delegation: {a: {servers: [\"[\"]}}\n",
+		}, `delegation.a.servers: invalid pattern "["`},
 		"move to other swarm": {map[string]string{
 			"fleet.yml":    "",
 			"swarms/a.yml": "servers: {s1: {swarm: b}}\n",

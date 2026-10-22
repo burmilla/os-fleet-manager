@@ -7,7 +7,8 @@
 # delegated to different teams (see CODEOWNERS):
 #   swarms/<swarm>.yml                 a Swarm, its environments and servers
 #   swarms/<swarm>/<environment>.yml   one environment and its servers
-# A Swarm, environment or server can be defined only once.
+# A Swarm, environment or server can be defined only once, and those files
+# can only list servers delegated to their Swarm below.
 
 defaults:
   os_image: burmilla/os            # use your registry mirror here if needed
@@ -33,6 +34,12 @@ defaults:
     # Hardening: stop sshd 10 minutes after boot, as soon as no SSH session
     # is active. sshd starts again after a reboot, or right away with "0".
     disable_after_boot: 10m
+
+# Which hostnames the files of each Swarm may list under servers:
+# (path.Match patterns). Keep this file owned by the platform team.
+delegation:
+  swarm-a:
+    servers: ["swarm-a-*"]
 
 servers:
   legacy-01:

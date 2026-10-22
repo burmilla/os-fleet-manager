@@ -92,6 +92,9 @@ type Config struct {
 	Defaults Settings          `yaml:"defaults"`
 	Swarms   map[string]Swarm  `yaml:"swarms,omitempty"`
 	Servers  map[string]Server `yaml:"servers,omitempty"`
+	// Delegation limits what the files in the swarms directory may
+	// define. Only fleet.yml can set it.
+	Delegation map[string]Delegation `yaml:"delegation,omitempty"`
 
 	// Revision is the Git commit the configuration was loaded from.
 	Revision string `yaml:"-"`

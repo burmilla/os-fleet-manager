@@ -3,6 +3,7 @@ package fleet
 import (
 	"fmt"
 	"os"
+	"path"
 	"path/filepath"
 	"sort"
 	"strings"
@@ -14,6 +15,25 @@ import (
 // configuration repository delegate them to different teams, e.g. with
 // CODEOWNERS and branch protection.
 const SwarmDir = "swarms"
+
+// Delegation of one Swarm, set in fleet.yml.
+type Delegation struct {
+	// Servers are hostname patterns (path.Match syntax, e.g. "web-*") which
+	// the files of the Swarm may list under servers:. Without patterns
+	// they cannot list any server, so a team cannot claim a server of
+	// another team.
+	Servers []string `yaml:"servers,omitempty"`
+}
+
+// delegated reports whether files of swarm may define hostname.
+func (c *Config) delegated(swarm, hostname string) bool {
+	for _, p := range c.Delegation[swarm].Servers {
+		if ok, _ := path.Match(p, hostname); ok {
+			return true
+		}
+	}
+	return false
+}
 
 // SwarmFile is the content of swarms/<swarm>.yml. Its servers belong to
 // that Swarm.
@@ -42,6 +62,13 @@ func yamlName(name string) (string, bool) {
 // a Swarm, environment or server in more than one place is an error, so
 // one file cannot override what another one owns.
 func (c *Config) loadSwarmDir(dir string) error {
+	for swarm, d := range c.Delegation {
+		for _, p := range d.Servers {
+			if _, err := path.Match(p, ""); err != nil {
+				return fmt.Errorf("fleet.yml: delegation.%s.servers: invalid pattern %q", swarm, p)
+			}
+		}
+	}
 	entries, err := os.ReadDir(dir)
 	if os.IsNotExist(err) {
 		return nil
@@ -66,6 +93,9 @@ func (c *Config) loadSwarmDir(dir string) error {
 			}
 			if env != "" && srv.Environment != "" && srv.Environment != env {
 				return fmt.Errorf("%s: server %s cannot be moved to environment %q from here", file, h, srv.Environment)
+			}
+			if !c.delegated(swarm, h) {
+				return fmt.Errorf("%s: server %s is not delegated to swarm %s (delegation.%s.servers in fleet.yml)", file, h, swarm, swarm)
 			}
 			if other, dup := origin[h]; dup {
 				return fmt.Errorf("%s: server %s is already defined in %s", file, h, other)

@@ -75,9 +75,18 @@ swarms/swarm-a/production.yml      one environment and its servers (e.g. product
 * A file cannot move a server to another Swarm or environment, and a Swarm,
   environment or server may be defined only once across all files, so one
   team cannot override what another team's file defines.
-* Protect environments with `htpasswd`: a server then only accepts
-  configuration from the environment it has credentials for, even if another
-  team's file lists its hostname.
+* Server entries need a delegation in `fleet.yml`: `delegation.<swarm>.servers`
+  lists the hostname patterns (`path.Match` syntax) which the files of that
+  Swarm may list. Without it they cannot list any server, so a team cannot
+  pull another team's server into its Swarm. Servers not listed anywhere still
+  follow the Swarm and Environment configured on them.
+
+  ```yaml
+  # fleet.yml, owned by the platform team
+  delegation:
+    swarm-a:
+      servers: ["swarm-a-*"]
+  ```
 * If any file is invalid, Fleet Manager keeps serving the previous
   configuration (`burmilla_fleet_config_sync_success` is 0). Run
   `fleet-manager validate fleet.yml` in CI of the configuration repository
@@ -153,6 +162,22 @@ swarms:
 Basic authentication sends the password with every request, so use TLS:
 set `FLEET_TLS_CERT` / `FLEET_TLS_KEY` or put Fleet Manager behind a TLS
 reverse proxy.
+
+What it protects and what not:
+
+* The bcrypt hashes can be kept in the configuration repository, like
+  `/etc/shadow` entries: they cannot be reversed, only guessed. Use long
+  random passwords (e.g. `openssl rand -base64 24`), which make guessing
+  infeasible even for someone who can read the repository.
+* The password is shared by all servers of the Swarm + Environment and stored
+  on each of them (`rancher.environment.FLEET_PASSWORD`). Whoever has root on
+  one of them can act as any server of that environment: send false reports
+  or take its maintenance locks. It cannot reach other environments.
+* It authenticates servers towards Fleet Manager, not Fleet Manager towards
+  servers: use HTTPS (and `FLEET_CA_CERT` for a private CA) so clients only
+  take configuration from the real Fleet Manager.
+* Configuration itself is not secret (`/api/v1/servers` stays open); do not
+  put secrets into `fleet.yml`.
 
 ### Maintenance lock and Swarm health
 
