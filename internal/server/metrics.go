@@ -65,7 +65,7 @@ func (s *Server) handleMetrics(w http.ResponseWriter, r *http.Request) {
 		pending  = &metric{name: "burmilla_fleet_server_maintenance_required", help: "Pending maintenance of a server by reason.", typ: "gauge"}
 		sshSync  = &metric{name: "burmilla_fleet_server_ssh_in_sync", help: "Whether the SSH keys and password authentication of a server match the configuration.", typ: "gauge"}
 		sshPass  = &metric{name: "burmilla_fleet_server_ssh_password_authentication", help: "Whether sshd of a server accepts passwords.", typ: "gauge"}
-		sshOff   = &metric{name: "burmilla_fleet_server_ssh_disabled", help: "Whether new SSH connections to a server are blocked (ssh.disable_after_boot).", typ: "gauge"}
+		sshOff   = &metric{name: "burmilla_fleet_server_ssh_disabled", help: "Whether sshd of a server is disabled (ssh.disable_after_boot).", typ: "gauge"}
 		lockHeld = &metric{name: "burmilla_fleet_server_maintenance_lock_held", help: "Whether a server holds a maintenance lock.", typ: "gauge"}
 		locks    = &metric{name: "burmilla_fleet_maintenance_locks", help: "Maintenance locks held per Swarm and Environment.", typ: "gauge"}
 		swHealth = &metric{name: "burmilla_fleet_swarm_healthy", help: "Whether the whole Swarm is healthy (servers in maintenance excluded).", typ: "gauge"}

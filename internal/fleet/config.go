@@ -56,11 +56,11 @@ type SSH struct {
 	AuthorizedKeys []string `yaml:"authorized_keys" json:"authorized_keys"`
 	// PasswordAuthentication enables or disables password logins in sshd.
 	PasswordAuthentication *bool `yaml:"password_authentication,omitempty" json:"password_authentication"`
-	// DisableAfterBoot hardens the server by blocking new SSH connections
-	// once it has been up this long (e.g. 10m) and no SSH session is
-	// active. SSH is available again after a reboot. "0" turns it off.
+	// DisableAfterBoot hardens the server by stopping sshd once it has
+	// been up this long (e.g. 10m) and no SSH session is active. sshd
+	// starts again after a reboot. "0" enables sshd right away.
 	DisableAfterBoot string `yaml:"disable_after_boot,omitempty" json:"disable_after_boot,omitempty"`
-	// Disabled is reported by the client: new SSH connections are blocked.
+	// Disabled is reported by the client: sshd is disabled.
 	Disabled bool `yaml:"-" json:"disabled,omitempty"`
 }
 
@@ -396,9 +396,7 @@ func (c *Config) Resolve(hostname, swarm, environment string, now time.Time) Des
 	}
 	if s.SSH != nil {
 		d.SSH = *s.SSH
-		if v, _ := time.ParseDuration(d.SSH.DisableAfterBoot); v == 0 {
-			d.SSH.DisableAfterBoot = ""
-		} else {
+		if v, err := time.ParseDuration(d.SSH.DisableAfterBoot); err == nil {
 			d.SSH.DisableAfterBoot = v.String()
 		}
 	}

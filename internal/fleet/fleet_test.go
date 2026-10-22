@@ -172,7 +172,7 @@ func TestSSHSettings(t *testing.T) {
 		t.Fatal("client did not report SSH state")
 	}
 
-	if prod.SSH.DisableAfterBoot != "10m0s" || test.SSH.DisableAfterBoot != "" {
+	if prod.SSH.DisableAfterBoot != "10m0s" || test.SSH.DisableAfterBoot != "0s" {
 		t.Fatalf("production disables SSH 10m after boot, test turns it off: %q %q", prod.SSH.DisableAfterBoot, test.SSH.DisableAfterBoot)
 	}
 

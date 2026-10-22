@@ -50,7 +50,7 @@ inherited `defaults` < `swarms.<swarm>` < `swarms.<swarm>.environments.<env>`
 | `check_interval`             | How often clients check in, default `5m` |
 | `ssh.authorized_keys`        | SSH public keys of the `rancher` and `docker` users managed by fleet-client. The list of the most specific level wins. `[]` removes all managed keys, unset = not managed |
 | `ssh.password_authentication`| `true` / `false` enables or disables password logins in sshd. Unset = not managed |
-| `ssh.disable_after_boot`     | Hardening: block new SSH connections once the server has been up this long (e.g. `10m`) and no SSH session is active. `0` = off |
+| `ssh.disable_after_boot`     | Hardening: stop sshd once the server has been up this long (e.g. `10m`) and no SSH session is active. `0` = enable sshd, unset = not managed |
 
 A `servers:` entry can also set `swarm` and `environment`, which then win
 over what the client was configured with.
@@ -69,14 +69,13 @@ lock, because they do not interrupt running workloads:
   `/etc/ssh/sshd_config.d/50-burmilla-fleet.conf` in the console container
   and sshd is reloaded. Open sessions are kept.
 
-* `disable_after_boot` blocks new connections to the sshd port(s) with an
-  iptables / ip6tables rule (comment `burmilla-fleet-ssh-disabled`) once the
-  server has been up that long and there is no established SSH connection.
-  While a session is open fleet-client checks again every minute. The rule
-  is not persisted, so SSH is open again after every boot for the same
-  period, and fleet-client removes it right away when the setting is removed
-  or set to `0`; that is the way to reopen SSH on a running server (console
-  access works as well).
+* `disable_after_boot` stops sshd of the console (`ros console sshd
+  disable --if-idle`) once the server has been up that long and no SSH
+  connection is established. While a session is open fleet-client checks
+  again every minute. sshd starts again after every boot, so SSH is
+  available for the same period after a reboot; `0` enables sshd right away
+  on running servers (console access works as well). Needs a BurmillaOS
+  version with `ros console sshd`.
 
 Make sure servers have working keys before disabling passwords. The applied
 state is reported back and exposed as `burmilla_fleet_server_ssh_in_sync`.
@@ -215,7 +214,7 @@ optional, per Swarm + Environment (see above). Full contract:
 | `burmilla_fleet_server_boot_timestamp_seconds` | hostname, swarm, environment |
 | `burmilla_fleet_server_ssh_in_sync` | hostname, swarm, environment (managed SSH keys and password setting applied) |
 | `burmilla_fleet_server_ssh_password_authentication` | hostname, swarm, environment (sshd accepts passwords) |
-| `burmilla_fleet_server_ssh_disabled` | hostname, swarm, environment (new SSH connections blocked by `disable_after_boot`) |
+| `burmilla_fleet_server_ssh_disabled` | hostname, swarm, environment (sshd disabled by `disable_after_boot`) |
 | `burmilla_fleet_maintenance_locks` | swarm, environment |
 | `burmilla_fleet_swarm_healthy` | swarm |
 | `burmilla_fleet_swarm_nodes` / `burmilla_fleet_swarm_managers` / `burmilla_fleet_swarm_services` | swarm, state |
