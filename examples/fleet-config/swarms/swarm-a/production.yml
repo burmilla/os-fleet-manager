@@ -1,0 +1,26 @@
+# Environment production of swarm-a, owned by the production operations
+# team (see CODEOWNERS).
+os_version: v3.0.0
+docker_version: docker-29.9.1
+# Keys only, no password logins in production. authorized_keys is
+# inherited from defaults.
+ssh:
+  password_authentication: false
+# Servers of swarm-a production must authenticate with this user
+# (FLEET_USERNAME / FLEET_PASSWORD in fleet-client). Create entries
+# with: htpasswd -nbB swarm-a-production 'password'
+# htpasswd:
+#   - "swarm-a-production:$2y$05$..."
+# One-off restart of every server in swarm-a production which has
+# not been restarted since this time, in their maintenance windows.
+# restart_after: "2026-10-24T00:00:00Z"
+
+# Per-server settings of swarm-a production members.
+servers:
+  # Managers get their own windows so they never restart at the same time.
+  swarm-a-mgr-01:
+    maintenance_window: {days: [sat], start: "02:00", duration: 1h, timezone: Europe/Helsinki}
+  swarm-a-mgr-02:
+    maintenance_window: {days: [sat], start: "03:00", duration: 1h, timezone: Europe/Helsinki}
+  swarm-a-mgr-03:
+    maintenance_window: {days: [sat], start: "04:00", duration: 1h, timezone: Europe/Helsinki}

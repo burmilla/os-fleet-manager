@@ -6,6 +6,7 @@ package main
 import (
 	"context"
 	"errors"
+	"fmt"
 	"log"
 	"net/http"
 	"os"
@@ -38,6 +39,10 @@ func duration(key, def string) time.Duration {
 }
 
 func main() {
+	if len(os.Args) > 1 && os.Args[1] == "validate" {
+		validate(os.Args[2:])
+		return
+	}
 	listen := env("FLEET_LISTEN", ":8080")
 	dataDir := env("FLEET_DATA_DIR", "/data")
 	configFile := env("FLEET_CONFIG_FILE", "fleet.yml")
@@ -134,6 +139,25 @@ func load(ctx context.Context, repo *gitsync.Repo, localDir, configFile string) 
 	}
 	cfg.Revision = revision
 	return cfg, nil
+}
+
+// validate checks a configuration checkout, e.g. in CI of the
+// configuration repository: fleet-manager validate [path/to/fleet.yml]
+func validate(args []string) {
+	path := "fleet.yml"
+	if len(args) > 0 {
+		path = args[0]
+	}
+	cfg, err := fleet.Load(path)
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "invalid fleet configuration: %v\n", err)
+		os.Exit(1)
+	}
+	envs := 0
+	for _, sw := range cfg.Swarms {
+		envs += len(sw.Environments)
+	}
+	fmt.Printf("%s is valid: %d swarms, %d environments, %d servers\n", path, len(cfg.Swarms), envs, len(cfg.Listed()))
 }
 
 func trimNewline(b []byte) []byte {

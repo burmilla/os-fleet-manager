@@ -1,0 +1,13 @@
+# Validate the fleet configuration on every pull request, so a broken file
+# from one team cannot block configuration updates for everybody.
+name: validate
+on:
+  pull_request:
+  push:
+    branches: [main]
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - run: docker run --rm -v "$PWD:/config:ro" burmilla/os-fleet-manager:v1.1.0 validate /config/fleet.yml

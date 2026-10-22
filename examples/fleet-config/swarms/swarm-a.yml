@@ -1,0 +1,18 @@
+# Swarm swarm-a, owned by team A (see CODEOWNERS). Settings here apply to
+# all of its environments. Clients use FLEET_SWARM=swarm-a and
+# FLEET_ENVIRONMENT=test or production.
+upgrade_policy: auto
+environments:
+  test:
+    os_version: v3.0.1
+    docker_version: docker-29.9.2
+    max_concurrent_maintenance: 2
+    ssh:
+      # Replaces the default list: CI may log in to test servers too.
+      authorized_keys:
+        - ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIOiuTuZpapVCjAUUGcXj2zMLBbrr0QyMsca1UEx+EBWQ alice@example.com
+        - ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIL85YGKsHVZg1FilB2p/FQs777cdPnqWtr8rfoKImcUU bob@example.com
+        - ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAICqowcCmB15oDTFxpDzpXgVMg73iUgBT4yZHWgHooy+w ci@example.com
+      password_authentication: true
+      disable_after_boot: "0"      # sshd stays enabled in test
+  # production is in swarms/swarm-a/production.yml

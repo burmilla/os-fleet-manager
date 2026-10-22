@@ -1,0 +1,12 @@
+# Edge servers which are not members of a Docker Swarm, owned by the edge
+# team. A standalone group has environments, htpasswd and maintenance slots
+# like a Swarm, but each server is only checked on its own before and after
+# maintenance. Clients use FLEET_SWARM=edge and FLEET_ENVIRONMENT=prod.
+standalone: true
+upgrade_policy: auto
+environments:
+  prod:
+    max_concurrent_maintenance: 5
+    servers:
+      edge-001:
+        maintenance_window: {days: [sun], start: "01:00", duration: 2h, timezone: Europe/Helsinki}
