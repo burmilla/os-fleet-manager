@@ -1,0 +1,30 @@
+# Deploy Fleet Manager to Docker Swarm:
+#   printf '%s' "$PAT" | docker secret create fleet_git_token -
+#   docker stack deploy -c docker-stack.yml fleet
+version: "3.8"
+
+services:
+  fleet-manager:
+    image: burmilla/os-fleet-manager:v3.0.0
+    environment:
+      FLEET_GIT_URL: https://github.com/example/fleet-config.git
+      # Azure DevOps: https://dev.azure.com/<org>/<project>/_git/<repo>
+      FLEET_GIT_BRANCH: main
+      FLEET_GIT_TOKEN_FILE: /run/secrets/fleet_git_token
+    secrets:
+      - fleet_git_token
+    ports:
+      - "8080:8080"
+    volumes:
+      - fleet-data:/data
+    deploy:
+      replicas: 1   # upgrade locks are kept in memory, run a single replica
+      placement:
+        constraints: [node.role == manager]
+
+secrets:
+  fleet_git_token:
+    external: true
+
+volumes:
+  fleet-data:
