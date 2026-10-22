@@ -433,9 +433,12 @@ func TestSSHStatus(t *testing.T) {
 	}
 
 	off := false
-	_, body = e.post("/api/v1/report", Report{Hostname: "solo", SSH: &fleet.SSH{AuthorizedKeys: []string{key}, PasswordAuthentication: &off}})
+	_, body = e.post("/api/v1/report", Report{Hostname: "solo", SSH: &fleet.SSH{AuthorizedKeys: []string{key}, PasswordAuthentication: &off, Disabled: true}})
 	_ = json.Unmarshal(body, &d)
 	if !d.SSHInSync {
 		t.Fatalf("should be in sync: %s", body)
+	}
+	if want := `burmilla_fleet_server_ssh_disabled{hostname="solo",swarm="",environment=""} 1`; !strings.Contains(string(e.get("/metrics")), want) {
+		t.Fatalf("missing %s", want)
 	}
 }

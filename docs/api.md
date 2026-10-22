@@ -57,7 +57,8 @@ Response `200`:
   "restart_after": "",
   "ssh": {
     "authorized_keys": ["ssh-ed25519 AAAA... alice@example.com"],
-    "password_authentication": false
+    "password_authentication": false,
+    "disable_after_boot": "10m0s"
   },
   "config_revision": "3f2c1a9...",
   "ssh_in_sync": true,
@@ -89,6 +90,9 @@ Response `200`:
   the `rancher` and `docker` users; `null` means "do not manage keys" and `[]`
   removes all managed keys. `ssh.password_authentication` is `null` when not
   managed. SSH settings are applied right away, without a maintenance lock.
+* `ssh.disable_after_boot` (Go duration, omitted when off): block new SSH
+  connections once the server has been up this long and no SSH session is
+  active.
 * `ssh_in_sync` tells whether the SSH state of the last report matches `ssh`.
 
 `400` if `hostname` is missing. `503` if no configuration has been loaded yet.
@@ -126,7 +130,8 @@ Clients report their current state. Body:
   },
   "ssh": {
     "authorized_keys": ["ssh-ed25519 AAAA... alice@example.com"],
-    "password_authentication": false
+    "password_authentication": false,
+    "disabled": true
   }
 }
 ```
@@ -141,7 +146,8 @@ all tasks run the target configuration. Jobs are skipped.
 
 `ssh` is the applied SSH state: the keys in the block managed by the client
 (`null` when it does not manage keys) and whether sshd accepts passwords
-(`sshd -T`). It is omitted when the client could not read it.
+(`sshd -T`), and `disabled` when new SSH connections are blocked because of
+`disable_after_boot`. It is omitted when the client could not read it.
 
 `state` is one of `idle`, `downloading`, `upgrading`, `waiting`, `error`
 (free text is accepted, these are the values the bundled client sends).

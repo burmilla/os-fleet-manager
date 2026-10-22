@@ -172,6 +172,10 @@ func TestSSHSettings(t *testing.T) {
 		t.Fatal("client did not report SSH state")
 	}
 
+	if prod.SSH.DisableAfterBoot != "10m0s" || test.SSH.DisableAfterBoot != "" {
+		t.Fatalf("production disables SSH 10m after boot, test turns it off: %q %q", prod.SSH.DisableAfterBoot, test.SSH.DisableAfterBoot)
+	}
+
 	// An empty list removes all managed keys, which differs from unset.
 	cfg, err = Parse([]byte("defaults: {ssh: {authorized_keys: []}}"))
 	if err != nil {
@@ -185,6 +189,7 @@ func TestSSHSettings(t *testing.T) {
 func TestInvalidSSHKey(t *testing.T) {
 	for _, c := range []string{
 		"defaults: {ssh: {authorized_keys: [not-a-key]}}",
+		"defaults: {ssh: {disable_after_boot: 30s}}",
 		"defaults: {ssh: {authorized_keys: [\"ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIOiuTuZpapVCjAUUGcXj2zMLBbrr0QyMsca1UEx+EBWQ a\\nssh-rsa x\"]}}",
 	} {
 		if _, err := Parse([]byte(c)); err == nil {
