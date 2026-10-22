@@ -121,7 +121,13 @@ func (s *Server) handleConfig(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "hostname is required", http.StatusBadRequest)
 		return
 	}
-	writeJSON(w, http.StatusOK, s.desired(cfg, hostname, q.Get("swarm"), q.Get("environment"), s.Store.Records(), s.Now()))
+	records := s.Store.Records()
+	swarm, environment, err := s.authorize(cfg, r, hostname, q.Get("swarm"), q.Get("environment"), records)
+	if err != nil {
+		writeAuthError(w, err)
+		return
+	}
+	writeJSON(w, http.StatusOK, s.desired(cfg, hostname, swarm, environment, records, s.Now()))
 }
 
 func (s *Server) handleReport(w http.ResponseWriter, r *http.Request) {
@@ -137,6 +143,11 @@ func (s *Server) handleReport(w http.ResponseWriter, r *http.Request) {
 	}
 	if rep.Hostname == "" {
 		http.Error(w, "hostname is required", http.StatusBadRequest)
+		return
+	}
+	var err error
+	if rep.Swarm, rep.Environment, err = s.authorize(cfg, r, rep.Hostname, rep.Swarm, rep.Environment, s.Store.Records()); err != nil {
+		writeAuthError(w, err)
 		return
 	}
 	now := s.Now()
@@ -180,7 +191,13 @@ func (s *Server) handleLock(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	now := s.Now()
-	d := s.desired(cfg, req.Hostname, req.Swarm, req.Environment, s.Store.Records(), now)
+	records := s.Store.Records()
+	swarm, environment, err := s.authorize(cfg, r, req.Hostname, req.Swarm, req.Environment, records)
+	if err != nil {
+		writeAuthError(w, err)
+		return
+	}
+	d := s.desired(cfg, req.Hostname, swarm, environment, records, now)
 	if !d.MaintenanceWindowActive {
 		writeJSON(w, http.StatusConflict, lockResponse{Holders: []string{}, Message: "outside of maintenance window"})
 		return
@@ -203,6 +220,12 @@ func (s *Server) handleUnlock(w http.ResponseWriter, r *http.Request) {
 	if hostname == "" {
 		http.Error(w, "hostname is required", http.StatusBadRequest)
 		return
+	}
+	if cfg := s.Config(); cfg != nil {
+		if _, _, err := s.authorize(cfg, r, hostname, "", "", s.Store.Records()); err != nil {
+			writeAuthError(w, err)
+			return
+		}
 	}
 	s.Store.Release(hostname)
 	w.WriteHeader(http.StatusNoContent)

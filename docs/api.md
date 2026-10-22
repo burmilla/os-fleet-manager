@@ -1,8 +1,17 @@
 # Fleet Manager API (v1)
 
-The API is plain HTTP + JSON and has **no authentication**. It only hands out
-target versions and maintenance windows, and stores status that clients report.
-Run it on a trusted network (or behind a reverse proxy) if that matters to you.
+The API is plain HTTP(S) + JSON. Authentication is optional: a Swarm +
+Environment with `htpasswd` entries in `fleet.yml` requires HTTP Basic
+authentication with one of them on `GET /api/v1/config`, `POST /api/v1/report`
+and the maintenance lock endpoints.
+
+* Credentials decide the Swarm + Environment of the request; the `swarm` /
+  `environment` sent by the client are ignored.
+* A hostname that belongs to a protected Swarm + Environment, by the
+  `servers:` section or by its earlier reports, needs that one's credentials:
+  `401` without credentials, `403` with credentials of another one.
+* Wrong credentials give `401` with `WWW-Authenticate: Basic`.
+* `/api/v1/servers`, `/api/v1/swarms`, `/metrics` and `/healthz` are open.
 
 All timestamps are RFC 3339 in UTC.
 

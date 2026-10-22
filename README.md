@@ -16,6 +16,7 @@ which are part of a Docker Swarm:
   service running all its tasks with its target configuration, and are only released
   once the server is back and the Swarm is healthy again, so a rollout never
   takes down more nodes than you allow and stops on the first broken node.
+* Optional htpasswd-style **authentication per Swarm + Environment**.
 * Servers report back their state; Fleet Manager publishes it as
   **Prometheus metrics**, with example **Grafana dashboards**.
 
@@ -50,6 +51,35 @@ inherited `defaults` < `swarms.<swarm>` < `swarms.<swarm>.environments.<env>`
 
 A `servers:` entry can also set `swarm` and `environment`, which then win
 over what the client was configured with.
+
+### Authentication
+
+The API can stay open, but each Swarm + Environment can be protected with
+htpasswd-style HTTP Basic authentication:
+
+```yaml
+swarms:
+  swarm-a:
+    environments:
+      production:
+        htpasswd:
+          - "swarm-a-production:$2y$05$..."   # htpasswd -nbB swarm-a-production 'password'
+```
+
+* Only bcrypt entries are accepted, and a user name can be used by one Swarm +
+  Environment only. Several entries allow rotating passwords.
+* Credentials bind the client: with them a server always acts in their Swarm +
+  Environment, whatever it claims.
+* A server that belongs to a protected Swarm + Environment (through `servers:`
+  or its earlier reports) must use that one's credentials for config, reports
+  and locks, so another environment's servers cannot report for it or take its
+  maintenance locks. To move such a server, list it under `servers:`.
+* Unprotected Swarm + Environments, and `/api/v1/servers`, `/api/v1/swarms`
+  and `/metrics`, stay open.
+
+Basic authentication sends the password with every request, so use TLS:
+set `FLEET_TLS_CERT` / `FLEET_TLS_KEY` or put Fleet Manager behind a TLS
+reverse proxy.
 
 ### Maintenance lock and Swarm health
 
@@ -96,6 +126,7 @@ granted once it has been written to disk.
 | `FLEET_LOCK_TTL`       | `30m`        | Maintenance lock lifetime |
 | `FLEET_DATA_DIR`       | `/data`      | Repository checkout, last reports and maintenance locks |
 | `FLEET_LISTEN`         | `:8080`      | Listen address |
+| `FLEET_TLS_CERT`, `FLEET_TLS_KEY` |   | Serve HTTPS with this certificate and key |
 
 Tokens:
 
@@ -111,8 +142,8 @@ to 0.
 
 ## API
 
-The API has no authentication by design: it only serves versions and
-maintenance windows. Put it on a trusted network. Full contract:
+The API only serves versions and maintenance windows, so authentication is
+optional, per Swarm + Environment (see above). Full contract:
 [docs/api.md](docs/api.md).
 
 | Endpoint                            | Use |

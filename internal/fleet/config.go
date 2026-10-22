@@ -45,7 +45,15 @@ type Settings struct {
 
 type Swarm struct {
 	Settings     `yaml:",inline"`
-	Environments map[string]Settings `yaml:"environments,omitempty"`
+	Environments map[string]Environment `yaml:"environments,omitempty"`
+}
+
+type Environment struct {
+	Settings `yaml:",inline"`
+	// Htpasswd lines (user:bcrypt-hash, e.g. from htpasswd -nbB) which
+	// protect this Swarm + Environment. Servers in it must authenticate
+	// with one of them, and the credentials bind a client to it.
+	Htpasswd []string `yaml:"htpasswd,omitempty"`
 }
 
 type Server struct {
@@ -123,6 +131,7 @@ func (c *Config) Validate() error {
 		return nil
 	}
 
+	users := map[string]string{}
 	if err := check("defaults", c.Defaults); err != nil {
 		return err
 	}
@@ -130,9 +139,20 @@ func (c *Config) Validate() error {
 		if err := check("swarms."+name, sw.Settings); err != nil {
 			return err
 		}
-		for env, s := range sw.Environments {
-			if err := check("swarms."+name+".environments."+env, s); err != nil {
+		for env, e := range sw.Environments {
+			where := "swarms." + name + ".environments." + env
+			if err := check(where, e.Settings); err != nil {
 				return err
+			}
+			for _, line := range e.Htpasswd {
+				user, hash, ok := strings.Cut(line, ":")
+				if !ok || user == "" || !strings.HasPrefix(hash, "$2") {
+					return fmt.Errorf("%s: htpasswd entries must be user:bcrypt-hash (htpasswd -nbB user password)", where)
+				}
+				if other, dup := users[user]; dup {
+					return fmt.Errorf("%s: htpasswd user %q is already used by %s", where, user, other)
+				}
+				users[user] = name + "/" + env
 			}
 		}
 	}
@@ -266,7 +286,7 @@ func (c *Config) Resolve(hostname, swarm, environment string, now time.Time) Des
 	if sw, ok := c.Swarms[swarm]; ok {
 		merge(&s, sw.Settings)
 		if env, ok := sw.Environments[environment]; ok {
-			merge(&s, env)
+			merge(&s, env.Settings)
 		}
 	}
 	if known {
@@ -304,4 +324,28 @@ func (c *Config) Resolve(hostname, swarm, environment string, now time.Time) Des
 		d.MaintenanceWindowActive = true
 	}
 	return d
+}
+
+// Credential is one htpasswd entry of a Swarm + Environment.
+type Credential struct {
+	Swarm, Environment, User, Hash string
+}
+
+// Credentials returns all htpasswd entries by user name.
+func (c *Config) Credentials() map[string]Credential {
+	out := map[string]Credential{}
+	for name, sw := range c.Swarms {
+		for env, e := range sw.Environments {
+			for _, line := range e.Htpasswd {
+				user, hash, _ := strings.Cut(line, ":")
+				out[user] = Credential{Swarm: name, Environment: env, User: user, Hash: hash}
+			}
+		}
+	}
+	return out
+}
+
+// Protected reports whether a Swarm + Environment requires authentication.
+func (c *Config) Protected(swarm, environment string) bool {
+	return len(c.Swarms[swarm].Environments[environment].Htpasswd) > 0
 }

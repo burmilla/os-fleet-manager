@@ -13,6 +13,7 @@ import (
 	"time"
 
 	"github.com/burmilla/os-fleet-manager/internal/fleet"
+	"golang.org/x/crypto/bcrypt"
 )
 
 const testConfig = `
@@ -305,5 +306,97 @@ func TestLockExpires(t *testing.T) {
 	}
 	if _, _, err := s.Acquire("b", "g", "restart", 1, now.Add(2*time.Minute), nil); err != nil {
 		t.Fatal("lock should have expired")
+	}
+}
+
+func TestAuthentication(t *testing.T) {
+	hash, _ := bcrypt.GenerateFromPassword([]byte("secret"), bcrypt.MinCost)
+	cfg, err := fleet.Parse([]byte(`
+defaults: {os_version: v3.0.0}
+swarms:
+  s1:
+    environments:
+      prod: {htpasswd: ["s1-prod:` + string(hash) + `"]}
+      test: {}
+servers:
+  pinned: {swarm: s1, environment: prod}
+`))
+	if err != nil {
+		t.Fatal(err)
+	}
+	e := newEnv(t)
+	e.s.SetConfig(cfg)
+
+	do := func(user, pass string, rep Report) (int, string) {
+		data, _ := json.Marshal(rep)
+		req, _ := http.NewRequest(http.MethodPost, e.url+"/api/v1/report", bytes.NewReader(data))
+		if user != "" {
+			req.SetBasicAuth(user, pass)
+		}
+		resp, err := http.DefaultClient.Do(req)
+		if err != nil {
+			t.Fatal(err)
+		}
+		body, _ := io.ReadAll(resp.Body)
+		return resp.StatusCode, string(body)
+	}
+
+	if code, _ := do("", "", Report{Hostname: "a", Swarm: "s1", Environment: "prod"}); code != http.StatusUnauthorized {
+		t.Fatalf("protected environment without credentials: %d", code)
+	}
+	if code, _ := do("s1-prod", "wrong", Report{Hostname: "a", Swarm: "s1", Environment: "prod"}); code != http.StatusUnauthorized {
+		t.Fatalf("wrong password: %d", code)
+	}
+	if code, _ := do("", "", Report{Hostname: "pinned"}); code != http.StatusUnauthorized {
+		t.Fatalf("server pinned to a protected environment without credentials: %d", code)
+	}
+	// Credentials decide the Swarm + Environment, whatever the body says.
+	code, body := do("s1-prod", "secret", Report{Hostname: "a", Swarm: "s1", Environment: "test"})
+	if code != 200 || !strings.Contains(body, `"environment":"prod"`) {
+		t.Fatalf("valid credentials: %d %s", code, body)
+	}
+	if got := e.s.Store.Records()["a"].Report.Environment; got != "prod" {
+		t.Fatalf("report stored in %s", got)
+	}
+	// Once known in prod, the host cannot be taken over without its credentials.
+	if code, _ := do("", "", Report{Hostname: "a", Swarm: "s1", Environment: "test"}); code != http.StatusUnauthorized {
+		t.Fatalf("takeover without credentials: %d", code)
+	}
+	if code, _ := do("", "", Report{Hostname: "b", Swarm: "s1", Environment: "test"}); code != 200 {
+		t.Fatalf("unprotected environment: %d", code)
+	}
+
+	cfg2, err := fleet.Parse([]byte(`
+swarms:
+  s1:
+    environments:
+      prod: {htpasswd: ["s1-prod:` + string(hash) + `"]}
+      test: {htpasswd: ["s1-test:` + string(hash) + `"]}
+`))
+	if err != nil {
+		t.Fatal(err)
+	}
+	e.s.SetConfig(cfg2)
+	if code, body := do("s1-test", "secret", Report{Hostname: "a"}); code != http.StatusForbidden || !strings.Contains(body, "belongs to s1/prod") {
+		t.Fatalf("credentials of another environment: %d %s", code, body)
+	}
+
+	req, _ := http.NewRequest(http.MethodDelete, e.url+"/api/v1/maintenance/lock?hostname=a", nil)
+	if r, _ := http.DefaultClient.Do(req); r.StatusCode != http.StatusUnauthorized {
+		t.Fatalf("unlock without credentials: %d", r.StatusCode)
+	}
+	resp, _ := http.Get(e.url + "/api/v1/config?hostname=a")
+	if resp.StatusCode != http.StatusUnauthorized || resp.Header.Get("WWW-Authenticate") == "" {
+		t.Fatalf("config without credentials: %d", resp.StatusCode)
+	}
+
+	if _, err := fleet.Parse([]byte(`
+swarms:
+  s1:
+    environments:
+      a: {htpasswd: ["u:` + string(hash) + `"]}
+      b: {htpasswd: ["u:` + string(hash) + `"]}
+`)); err == nil {
+		t.Fatal("duplicate htpasswd user must be rejected")
 	}
 }

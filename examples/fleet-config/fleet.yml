@@ -28,6 +28,11 @@ swarms:
       production:
         os_version: v3.0.0
         docker_version: docker-29.9.1
+        # Servers of swarm-a production must authenticate with this user
+        # (FLEET_USERNAME / FLEET_PASSWORD in fleet-client). Create entries
+        # with: htpasswd -nbB swarm-a-production 'password'
+        # htpasswd:
+        #   - "swarm-a-production:$2y$05$..."
         # One-off restart of every server in swarm-a production which has
         # not been restarted since this time, in their maintenance windows.
         # restart_after: "2026-10-24T00:00:00Z"

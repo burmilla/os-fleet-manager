@@ -104,8 +104,15 @@ func main() {
 		defer cancel()
 		_ = httpSrv.Shutdown(shutdown)
 	}()
-	log.Printf("BurmillaOS Fleet Manager %s listening on %s", Version, listen)
-	if err := httpSrv.ListenAndServe(); err != nil && !errors.Is(err, http.ErrServerClosed) {
+	cert, key := os.Getenv("FLEET_TLS_CERT"), os.Getenv("FLEET_TLS_KEY")
+	log.Printf("BurmillaOS Fleet Manager %s listening on %s (TLS %t)", Version, listen, cert != "")
+	var err error
+	if cert != "" {
+		err = httpSrv.ListenAndServeTLS(cert, key)
+	} else {
+		err = httpSrv.ListenAndServe()
+	}
+	if err != nil && !errors.Is(err, http.ErrServerClosed) {
 		log.Fatal(err)
 	}
 }
