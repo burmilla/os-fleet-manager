@@ -1078,6 +1078,55 @@
     },
     {
       "id": 16,
+      "title": "Local containers not ready",
+      "type": "table",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "${datasource}"
+      },
+      "gridPos": {
+        "x": 0,
+        "y": 43,
+        "w": 24,
+        "h": 6
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${datasource}"
+          },
+          "expr": "burmilla_fleet_server_container_not_ready{swarm=~\"$swarm\",environment=~\"$environment\"}",
+          "refId": "A",
+          "format": "table",
+          "instant": true
+        }
+      ],
+      "description": "Local containers with a restart policy which are not running or not healthy. They block maintenance locks of their Swarm (or of the server itself outside of a Swarm).",
+      "options": {
+        "showHeader": true
+      },
+      "fieldConfig": {
+        "defaults": {},
+        "overrides": []
+      },
+      "transformations": [
+        {
+          "id": "organize",
+          "options": {
+            "excludeByName": {
+              "Time": true,
+              "__name__": true,
+              "Value": true,
+              "job": true,
+              "instance": true
+            }
+          }
+        }
+      ]
+    },
+    {
+      "id": 17,
       "title": "Configuration sync",
       "type": "timeseries",
       "datasource": {
@@ -1086,7 +1135,7 @@
       },
       "gridPos": {
         "x": 0,
-        "y": 43,
+        "y": 49,
         "w": 24,
         "h": 6
       },

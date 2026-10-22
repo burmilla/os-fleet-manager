@@ -132,8 +132,13 @@ and the freshest manager report shows no more nodes down or managers
 unreachable than there are servers in maintenance, and **every service runs all
 of its desired tasks, healthy and with its target configuration** (no update in
 progress, paused or rolling back; a global service may miss the tasks of the
-servers in maintenance). Managers additionally must not break the Raft quorum. The lock is released when the server reports the
-target state **and** the Swarm is healthy again. Details are in
+servers in maintenance), and **every local container with a restart policy**
+(`always`, `unless-stopped`, `on-failure`; not Swarm tasks) on those servers
+runs and, with a health check, is healthy. Managers additionally must not break
+the Raft quorum. Servers outside of a Swarm only need their own local
+containers to be ready. The lock is released when the server reports the target
+state **and** its local containers and the Swarm are healthy again. Label a
+container `io.burmilla.fleet.ignore=true` to leave it out of the check. Details are in
 [docs/api.md](docs/api.md); `GET /api/v1/swarms` shows why a Swarm is blocked.
 
 Because of this, run `fleet-client` on all members of a Swarm, managers
@@ -212,6 +217,8 @@ optional, per Swarm + Environment (see above). Full contract:
 | `burmilla_fleet_server_state` | hostname, swarm, environment, state |
 | `burmilla_fleet_server_last_report_timestamp_seconds` | hostname, swarm, environment (0 = never reported) |
 | `burmilla_fleet_server_boot_timestamp_seconds` | hostname, swarm, environment |
+| `burmilla_fleet_server_containers` | hostname, swarm, environment, state (local containers with a restart policy: ready / not_ready) |
+| `burmilla_fleet_server_container_not_ready` | hostname, swarm, environment, container, state, health |
 | `burmilla_fleet_server_ssh_in_sync` | hostname, swarm, environment (managed SSH keys and password setting applied) |
 | `burmilla_fleet_server_ssh_password_authentication` | hostname, swarm, environment (sshd accepts passwords) |
 | `burmilla_fleet_server_ssh_disabled` | hostname, swarm, environment (sshd disabled by `disable_after_boot`) |

@@ -39,6 +39,23 @@ type ServiceState struct {
 	UpdateState  string `json:"update_state"`
 }
 
+// ContainerStatus covers the local User Docker containers of a server
+// which Docker restarts on its own (restart policy always, unless-stopped
+// or on-failure). Swarm tasks are not included.
+type ContainerStatus struct {
+	Containers         int              `json:"containers"`
+	ContainersReady    int              `json:"containers_ready"`
+	ContainersNotReady []ContainerState `json:"containers_not_ready,omitempty"`
+}
+
+type ContainerState struct {
+	Name          string `json:"name"`
+	State         string `json:"state"`
+	Health        string `json:"health"`
+	RestartPolicy string `json:"restart_policy"`
+	ExitCode      int    `json:"exit_code"`
+}
+
 // Report is the body of POST /api/v1/report.
 type Report struct {
 	Hostname      string       `json:"hostname"`
@@ -52,6 +69,8 @@ type Report struct {
 	State         string       `json:"state"`
 	Message       string       `json:"message"`
 	SwarmStatus   *SwarmStatus `json:"swarm_status,omitempty"`
+	// Containers is omitted when User Docker is not reachable.
+	Containers *ContainerStatus `json:"containers,omitempty"`
 	// SSH is the applied state: the keys managed by fleet-client and
 	// whether sshd accepts passwords.
 	SSH *fleet.SSH `json:"ssh,omitempty"`

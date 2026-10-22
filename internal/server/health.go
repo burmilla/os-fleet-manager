@@ -75,6 +75,9 @@ func (s *Server) checkSwarm(cfg *fleet.Config, swarm string, ignore map[string]b
 		if rep.State == "error" {
 			return v, fmt.Errorf("%s reports error: %s", m.hostname, rep.Message)
 		}
+		if err := containerProblem(m.hostname, rep.Containers); err != nil {
+			return v, err
+		}
 		st := rep.SwarmStatus
 		if st == nil || st.LocalNodeState != "active" {
 			state := "unknown"
@@ -127,10 +130,40 @@ func serviceProblem(svc ServiceState, inMaintenance int) error {
 	return fmt.Errorf("service %s runs %d of %d tasks", svc.Name, svc.RunningTasks, svc.DesiredTasks)
 }
 
+// containerProblem tells why the local containers of a server block
+// maintenance. Reports without container status (older clients, User
+// Docker not reachable) do not block.
+func containerProblem(hostname string, cs *ContainerStatus) error {
+	if cs == nil || len(cs.ContainersNotReady) == 0 {
+		return nil
+	}
+	c := cs.ContainersNotReady[0]
+	state := "is " + c.State
+	if c.State == "running" && c.Health != "" {
+		state = "is " + c.Health
+	} else if c.State == "exited" {
+		state = fmt.Sprintf("exited with code %d", c.ExitCode)
+	}
+	msg := fmt.Sprintf("container %s on %s %s", c.Name, hostname, state)
+	if n := len(cs.ContainersNotReady); n > 1 {
+		msg += fmt.Sprintf(" (%d containers not ready)", n)
+	}
+	return fmt.Errorf("%s", msg)
+}
+
+// localProblem checks a server outside of a Swarm: its own last report.
+func localProblem(hostname string, records map[string]record) error {
+	rec, ok := records[hostname]
+	if !ok {
+		return nil
+	}
+	return containerProblem(hostname, rec.Report.Containers)
+}
+
 // canStartMaintenance decides if hostname may take a maintenance lock.
 func (s *Server) canStartMaintenance(cfg *fleet.Config, d fleet.Desired, hostname string, locks map[string]Lock, records map[string]record, now time.Time) error {
 	if d.Swarm == "" {
-		return nil
+		return localProblem(hostname, records)
 	}
 	ignore := map[string]bool{}
 	for h := range locks {
@@ -160,10 +193,11 @@ func (s *Server) canStartMaintenance(cfg *fleet.Config, d fleet.Desired, hostnam
 }
 
 // canFinishMaintenance decides if the lock of hostname can be released:
-// the server must be back in the Swarm and the whole Swarm healthy.
+// the server must be back in the Swarm and the whole Swarm healthy, and
+// its local containers ready.
 func (s *Server) canFinishMaintenance(cfg *fleet.Config, d fleet.Desired, hostname string, now time.Time) error {
 	if d.Swarm == "" {
-		return nil
+		return localProblem(hostname, s.Store.Records())
 	}
 	ignore := map[string]bool{}
 	for h := range s.Store.Locks(now) {

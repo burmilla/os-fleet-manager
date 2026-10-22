@@ -442,3 +442,50 @@ func TestSSHStatus(t *testing.T) {
 		t.Fatalf("missing %s", want)
 	}
 }
+
+func TestLocalContainers(t *testing.T) {
+	e := newEnv(t)
+	cfg, _ := fleet.Parse([]byte("defaults: {max_uptime: 30d}"))
+	e.s.SetConfig(cfg)
+	boot := e.now.Add(-40 * 24 * time.Hour)
+	starting := &ContainerStatus{Containers: 2, ContainersReady: 1, ContainersNotReady: []ContainerState{
+		{Name: "db", State: "running", Health: "starting", RestartPolicy: "always"}}}
+	ready := &ContainerStatus{Containers: 2, ContainersReady: 2}
+
+	e.post("/api/v1/report", Report{Hostname: "solo", BootTime: boot, Containers: starting})
+	if ok, msg := e.lock("solo"); ok || msg != "container db on solo is starting" {
+		t.Fatalf("lock must wait for local containers: %v %s", ok, msg)
+	}
+	e.post("/api/v1/report", Report{Hostname: "solo", BootTime: boot, Containers: ready})
+	if ok, msg := e.lock("solo"); !ok {
+		t.Fatalf("lock expected: %s", msg)
+	}
+
+	// Rebooted, but the containers are not back yet: the lock is kept.
+	e.post("/api/v1/report", Report{Hostname: "solo", BootTime: e.now, Containers: starting})
+	if _, held := e.s.Store.Locks(e.now)["solo"]; !held {
+		t.Fatal("lock must be kept until local containers are ready")
+	}
+	e.post("/api/v1/report", Report{Hostname: "solo", BootTime: e.now, Containers: ready})
+	if _, held := e.s.Store.Locks(e.now)["solo"]; held {
+		t.Fatal("lock should be released")
+	}
+	metrics := string(e.get("/metrics"))
+	if want := `burmilla_fleet_server_containers{hostname="solo",swarm="",environment="",state="ready"} 2`; !strings.Contains(metrics, want) {
+		t.Fatalf("missing %s", want)
+	}
+}
+
+func TestLocalContainersInSwarm(t *testing.T) {
+	e := newEnv(t)
+	for _, h := range []string{"m1", "m2", "m3"} {
+		e.report(h, "v2.9.0", 4, 3)
+	}
+	st := &SwarmStatus{NodeID: "w1", ClusterID: "c1", LocalNodeState: "active"}
+	e.post("/api/v1/report", Report{Hostname: "w1", OSVersion: "v3.0.0", DockerVersion: "docker-29.9.2", BootTime: e.now.Add(-time.Hour),
+		State: "idle", SwarmStatus: st, Containers: &ContainerStatus{Containers: 1, ContainersNotReady: []ContainerState{
+			{Name: "agent", State: "exited", ExitCode: 137, RestartPolicy: "unless-stopped"}}}})
+	if ok, msg := e.lock("m1"); ok || msg != "container agent on w1 exited with code 137" {
+		t.Fatalf("a broken container on another node must block: %v %s", ok, msg)
+	}
+}

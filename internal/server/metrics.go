@@ -63,6 +63,8 @@ func (s *Server) handleMetrics(w http.ResponseWriter, r *http.Request) {
 		boot     = &metric{name: "burmilla_fleet_server_boot_timestamp_seconds", help: "Boot time reported by a server.", typ: "gauge"}
 		restart  = &metric{name: "burmilla_fleet_server_restart_required", help: "Whether a scheduled restart of a server is due.", typ: "gauge"}
 		pending  = &metric{name: "burmilla_fleet_server_maintenance_required", help: "Pending maintenance of a server by reason.", typ: "gauge"}
+		ctrs     = &metric{name: "burmilla_fleet_server_containers", help: "Local containers with a restart policy by readiness.", typ: "gauge"}
+		ctrBad   = &metric{name: "burmilla_fleet_server_container_not_ready", help: "Local containers with a restart policy which are not ready.", typ: "gauge"}
 		sshSync  = &metric{name: "burmilla_fleet_server_ssh_in_sync", help: "Whether the SSH keys and password authentication of a server match the configuration.", typ: "gauge"}
 		sshPass  = &metric{name: "burmilla_fleet_server_ssh_password_authentication", help: "Whether sshd of a server accepts passwords.", typ: "gauge"}
 		sshOff   = &metric{name: "burmilla_fleet_server_ssh_disabled", help: "Whether sshd of a server is disabled (ssh.disable_after_boot).", typ: "gauge"}
@@ -126,6 +128,13 @@ func (s *Server) handleMetrics(w http.ResponseWriter, r *http.Request) {
 			pending.add(with([2]string{"reason", r}), b2f(slices.Contains(d.MaintenanceReasons, r)))
 		}
 		state.add(with([2]string{"state", rep.State}), 1)
+		if cs := rep.Containers; cs != nil {
+			ctrs.add(with([2]string{"state", "ready"}), float64(cs.ContainersReady))
+			ctrs.add(with([2]string{"state", "not_ready"}), float64(cs.Containers-cs.ContainersReady))
+			for _, c := range cs.ContainersNotReady {
+				ctrBad.add(with([2]string{"container", c.Name}, [2]string{"state", c.State}, [2]string{"health", c.Health}), 1)
+			}
+		}
 		sshSync.add(base, b2f(d.SSHInSync))
 		sshOff.add(base, b2f(rep.SSH != nil && rep.SSH.Disabled))
 		if rep.SSH != nil && rep.SSH.PasswordAuthentication != nil {
@@ -163,7 +172,7 @@ func (s *Server) handleMetrics(w http.ResponseWriter, r *http.Request) {
 	}
 
 	w.Header().Set("Content-Type", "text/plain; version=0.0.4; charset=utf-8")
-	for _, m := range []*metric{syncTime, syncOK, syncFail, revision, info, desired, lastSeen, upToDate, window, state, boot, restart, pending, sshSync, sshPass, sshOff, lockHeld, locks, swHealth, swNodes, swMgrs, swSvcs, svcRun, svcWant} {
+	for _, m := range []*metric{syncTime, syncOK, syncFail, revision, info, desired, lastSeen, upToDate, window, state, boot, restart, pending, ctrs, ctrBad, sshSync, sshPass, sshOff, lockHeld, locks, swHealth, swNodes, swMgrs, swSvcs, svcRun, svcWant} {
 		m.write(w)
 	}
 }

@@ -128,6 +128,13 @@ Clients report their current state. Body:
       {"name": "web", "mode": "replicated", "desired_tasks": 3, "running_tasks": 2, "update_state": ""}
     ]
   },
+  "containers": {
+    "containers": 3,
+    "containers_ready": 2,
+    "containers_not_ready": [
+      {"name": "db", "state": "running", "health": "starting", "restart_policy": "always", "exit_code": 0}
+    ]
+  },
   "ssh": {
     "authorized_keys": ["ssh-ed25519 AAAA... alice@example.com"],
     "password_authentication": false,
@@ -144,6 +151,15 @@ a health check as running only once it is healthy) and no update is in
 progress (`updating`, `paused`, `rollback_started`, `rollback_paused`), i.e.
 all tasks run the target configuration. Jobs are skipped.
 
+`containers` covers the local User Docker containers of the server which
+Docker restarts on its own (restart policy `always`, `unless-stopped` or
+`on-failure`); Swarm tasks and containers labelled
+`io.burmilla.fleet.ignore=true` are left out. A container is ready when it
+runs and, if it has a health check, is `healthy`; an `on-failure` container
+which exited with code 0 is done. Every server reports them, inside a Swarm
+or not. Omitted when User Docker is not reachable; such reports do not block
+maintenance.
+
 `ssh` is the applied SSH state: the keys in the block managed by the client
 (`null` when it does not manage keys) and whether sshd accepts passwords
 (`sshd -T`), and `disabled` when sshd is disabled
@@ -152,8 +168,9 @@ all tasks run the target configuration. Jobs are skipped.
 `state` is one of `idle`, `downloading`, `upgrading`, `waiting`, `error`
 (free text is accepted, these are the values the bundled client sends).
 
-If the server holds a maintenance lock, no maintenance is required any more
-and the whole Swarm is healthy again (see below), the lock is released.
+If the server holds a maintenance lock, no maintenance is required any more,
+its local containers are ready and the whole Swarm is healthy again (see
+below), the lock is released.
 
 Response `200` with the same document as `GET /api/v1/config` so a client can
 report and fetch in one round trip.
