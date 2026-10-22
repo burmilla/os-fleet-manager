@@ -104,7 +104,27 @@ func (s *Server) checkSwarm(cfg *fleet.Config, swarm string, ignore map[string]b
 	if down := v.manager.Managers - v.manager.ManagersReachable; down > v.ignoredManager {
 		return v, fmt.Errorf("%d managers of Swarm %s are unreachable (seen by %s)", down, swarm, v.managerHost)
 	}
+	for _, svc := range v.manager.ServicesNotReady {
+		if err := serviceProblem(svc, v.ignored); err != nil {
+			return v, fmt.Errorf("%w (Swarm %s, seen by %s)", err, swarm, v.managerHost)
+		}
+	}
 	return v, nil
+}
+
+// serviceProblem tells why a service blocks maintenance. Global services
+// can miss one task per server in maintenance; replicated services must run
+// all replicas, so their tasks have been rescheduled to the other nodes.
+func serviceProblem(svc ServiceState, inMaintenance int) error {
+	switch svc.UpdateState {
+	case "updating", "paused", "rollback_started", "rollback_paused":
+		return fmt.Errorf("service %s is not at its target configuration (update %s)", svc.Name, svc.UpdateState)
+	}
+	missing := svc.DesiredTasks - svc.RunningTasks
+	if missing <= 0 || (svc.Mode == "global" && missing <= inMaintenance) {
+		return nil
+	}
+	return fmt.Errorf("service %s runs %d of %d tasks", svc.Name, svc.RunningTasks, svc.DesiredTasks)
 }
 
 // canStartMaintenance decides if hostname may take a maintenance lock.

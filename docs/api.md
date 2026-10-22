@@ -98,14 +98,23 @@ Clients report their current state. Body:
     "nodes": 5,
     "nodes_ready": 5,
     "managers": 3,
-    "managers_reachable": 3
+    "managers_reachable": 3,
+    "services": 12,
+    "services_ready": 11,
+    "services_not_ready": [
+      {"name": "web", "mode": "replicated", "desired_tasks": 3, "running_tasks": 2, "update_state": ""}
+    ]
   }
 }
 ```
 
-`swarm_status` comes from the User Docker `/info` endpoint (and `/nodes` on
-managers). It is omitted when User Docker is not reachable. The node
-counters are only filled in by managers.
+`swarm_status` comes from the User Docker `/info` endpoint, and on managers
+also from `/nodes` and `/services?status=true`. It is omitted when User Docker
+is not reachable. Node and service counters are only filled in by managers.
+A service is ready when it runs all desired tasks (Swarm reports a task with
+a health check as running only once it is healthy) and no update is in
+progress (`updating`, `paused`, `rollback_started`, `rollback_paused`), i.e.
+all tasks run the target configuration. Jobs are skipped.
 
 `state` is one of `idle`, `downloading`, `upgrading`, `waiting`, `error`
 (free text is accepted, these are the values the bundled client sends).
@@ -137,8 +146,11 @@ The lock is granted only when all of these hold:
    * report `local_node_state: active` and the same Swarm cluster ID.
 
    The freshest manager report must not show more nodes down / managers
-   unreachable than there are lock holders. Without any manager report the
-   Swarm counts as unhealthy.
+   unreachable than there are lock holders, and every service must be
+   ready: running all desired tasks with its target configuration. A global
+   service may miss one task per server in maintenance; replicated services
+   must have been rescheduled to the remaining nodes. Without any manager
+   report the Swarm counts as unhealthy.
 4. If the requester is a manager, taking it down must keep the Raft quorum
    (with 3+ managers), or no other manager may be unavailable (1–2 managers).
 

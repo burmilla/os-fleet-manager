@@ -438,6 +438,16 @@
           "refId": "D",
           "format": "table",
           "instant": true
+        },
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${datasource}"
+          },
+          "expr": "burmilla_fleet_swarm_services{swarm=~\"$swarm\",state=\"not_ready\"}",
+          "refId": "E",
+          "format": "table",
+          "instant": true
         }
       ],
       "description": "Healthy = every server outside of maintenance reports fresh and active, and the freshest manager sees all other nodes ready. Details: GET /api/v1/swarms.",
@@ -505,7 +515,8 @@
               "Value #A": "Healthy",
               "Value #B": "Nodes ready",
               "Value #C": "Nodes down",
-              "Value #D": "Managers unreachable"
+              "Value #D": "Managers unreachable",
+              "Value #E": "Services not ready"
             }
           }
         }
@@ -988,6 +999,85 @@
     },
     {
       "id": 15,
+      "title": "Swarm services not ready",
+      "type": "table",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "${datasource}"
+      },
+      "gridPos": {
+        "x": 0,
+        "y": 37,
+        "w": 24,
+        "h": 6
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${datasource}"
+          },
+          "expr": "burmilla_fleet_swarm_service_running_tasks{swarm=~\"$swarm\"}",
+          "refId": "A",
+          "format": "table",
+          "instant": true
+        },
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${datasource}"
+          },
+          "expr": "burmilla_fleet_swarm_service_desired_tasks{swarm=~\"$swarm\"}",
+          "refId": "B",
+          "format": "table",
+          "instant": true
+        }
+      ],
+      "description": "Services which do not run all desired tasks or are in the middle of an update. They block maintenance locks (a global service may miss the tasks of servers in maintenance).",
+      "options": {
+        "showHeader": true
+      },
+      "fieldConfig": {
+        "defaults": {},
+        "overrides": []
+      },
+      "transformations": [
+        {
+          "id": "joinByField",
+          "options": {
+            "byField": "service",
+            "mode": "outer"
+          }
+        },
+        {
+          "id": "organize",
+          "options": {
+            "excludeByName": {
+              "Time": true,
+              "__name__": true,
+              "job": true,
+              "instance": true,
+              "Time 2": true,
+              "job 2": true,
+              "instance 2": true,
+              "__name__ 2": true,
+              "swarm 2": true,
+              "mode 2": true,
+              "update_state 2": true
+            },
+            "renameByName": {
+              "Value #A": "Running tasks",
+              "Value #B": "Desired tasks",
+              "swarm 1": "Swarm",
+              "mode 1": "Mode",
+              "update_state 1": "Update state"
+            }
+          }
+        }
+      ]
+    },
+    {
+      "id": 16,
       "title": "Configuration sync",
       "type": "timeseries",
       "datasource": {
@@ -996,7 +1086,7 @@
       },
       "gridPos": {
         "x": 0,
-        "y": 37,
+        "y": 43,
         "w": 24,
         "h": 6
       },

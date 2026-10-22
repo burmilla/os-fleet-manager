@@ -68,6 +68,9 @@ func (s *Server) handleMetrics(w http.ResponseWriter, r *http.Request) {
 		swHealth = &metric{name: "burmilla_fleet_swarm_healthy", help: "Whether the whole Swarm is healthy (servers in maintenance excluded).", typ: "gauge"}
 		swNodes  = &metric{name: "burmilla_fleet_swarm_nodes", help: "Swarm nodes as seen by the freshest manager report.", typ: "gauge"}
 		swMgrs   = &metric{name: "burmilla_fleet_swarm_managers", help: "Swarm managers as seen by the freshest manager report.", typ: "gauge"}
+		swSvcs   = &metric{name: "burmilla_fleet_swarm_services", help: "Swarm services by readiness as seen by the freshest manager report.", typ: "gauge"}
+		svcRun   = &metric{name: "burmilla_fleet_swarm_service_running_tasks", help: "Running tasks of Swarm services which are not ready.", typ: "gauge"}
+		svcWant  = &metric{name: "burmilla_fleet_swarm_service_desired_tasks", help: "Desired tasks of Swarm services which are not ready.", typ: "gauge"}
 	)
 
 	s.syncMu.Lock()
@@ -95,9 +98,11 @@ func (s *Server) handleMetrics(w http.ResponseWriter, r *http.Request) {
 		), 1)
 		window.add(base, b2f(d.MaintenanceWindowActive))
 		reason := ""
+		group := [2]string{d.Swarm, d.Environment}
+		lockCount[group] += 0 // every group gets a series, also without locks
 		if st.Lock != nil {
 			reason = st.Lock.Reason
-			lockCount[[2]string{d.Swarm, d.Environment}]++
+			lockCount[group]++
 		}
 		lockHeld.add(with([2]string{"reason", reason}), b2f(st.Lock != nil))
 		if st.Reported == nil {
@@ -139,11 +144,18 @@ func (s *Server) handleMetrics(w http.ResponseWriter, r *http.Request) {
 			swNodes.add(append(l, [2]string{"state", "down"}), float64(h.Status.Nodes-h.Status.NodesReady))
 			swMgrs.add(append(l, [2]string{"state", "reachable"}), float64(h.Status.ManagersReachable))
 			swMgrs.add(append(l, [2]string{"state", "unreachable"}), float64(h.Status.Managers-h.Status.ManagersReachable))
+			swSvcs.add(append(l, [2]string{"state", "ready"}), float64(h.Status.ServicesReady))
+			swSvcs.add(append(l, [2]string{"state", "not_ready"}), float64(h.Status.Services-h.Status.ServicesReady))
+			for _, svc := range h.Status.ServicesNotReady {
+				sl := append(append([][2]string{}, l...), [2]string{"service", svc.Name}, [2]string{"mode", svc.Mode}, [2]string{"update_state", svc.UpdateState})
+				svcRun.add(sl, float64(svc.RunningTasks))
+				svcWant.add(sl, float64(svc.DesiredTasks))
+			}
 		}
 	}
 
 	w.Header().Set("Content-Type", "text/plain; version=0.0.4; charset=utf-8")
-	for _, m := range []*metric{syncTime, syncOK, syncFail, revision, info, desired, lastSeen, upToDate, window, state, boot, restart, pending, lockHeld, locks, swHealth, swNodes, swMgrs} {
+	for _, m := range []*metric{syncTime, syncOK, syncFail, revision, info, desired, lastSeen, upToDate, window, state, boot, restart, pending, lockHeld, locks, swHealth, swNodes, swMgrs, swSvcs, svcRun, svcWant} {
 		m.write(w)
 	}
 }

@@ -21,6 +21,19 @@ type SwarmStatus struct {
 	NodesReady        int    `json:"nodes_ready"`
 	Managers          int    `json:"managers"`
 	ManagersReachable int    `json:"managers_reachable"`
+	// Service counters, managers only. ServicesNotReady lists services
+	// which do not run all desired tasks or are in the middle of an update.
+	Services         int            `json:"services"`
+	ServicesReady    int            `json:"services_ready"`
+	ServicesNotReady []ServiceState `json:"services_not_ready,omitempty"`
+}
+
+type ServiceState struct {
+	Name         string `json:"name"`
+	Mode         string `json:"mode"`
+	DesiredTasks int    `json:"desired_tasks"`
+	RunningTasks int    `json:"running_tasks"`
+	UpdateState  string `json:"update_state"`
 }
 
 // Report is the body of POST /api/v1/report.

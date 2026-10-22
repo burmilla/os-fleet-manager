@@ -78,11 +78,12 @@ func (e *env) get(path string) []byte {
 
 // report sends a healthy report. Managers see ready nodes out of 4 and
 // reachable managers out of 3.
-func (e *env) report(host, osVersion string, ready, reachable int) fleet.Desired {
+func (e *env) report(host, osVersion string, ready, reachable int, notReady ...ServiceState) fleet.Desired {
 	e.t.Helper()
 	st := &SwarmStatus{NodeID: host, ClusterID: "c1", LocalNodeState: "active"}
 	if strings.HasPrefix(host, "m") {
 		st.Manager, st.Nodes, st.NodesReady, st.Managers, st.ManagersReachable = true, 4, ready, 3, reachable
+		st.Services, st.ServicesReady, st.ServicesNotReady = 5, 5-len(notReady), notReady
 	}
 	code, body := e.post("/api/v1/report", Report{Hostname: host, OSVersion: osVersion, DockerVersion: "docker-29.9.2",
 		BootTime: e.now.Add(-time.Hour), State: "idle", SwarmStatus: st})
@@ -144,6 +145,19 @@ func TestMaintenanceLockFollowsSwarmHealth(t *testing.T) {
 	}
 	e.s.Store.Release("w1")
 
+	// Global services may miss the task of the server in maintenance,
+	// replicated services must be rescheduled first.
+	e.report("m2", "v2.0.3", 3, 2, ServiceState{Name: "agent", Mode: "global", DesiredTasks: 4, RunningTasks: 3})
+	if ok, msg := e.lock("w1"); !ok {
+		t.Fatalf("missing global task of the lock holder is fine: %s", msg)
+	}
+	e.s.Store.Release("w1")
+	e.report("m2", "v2.0.3", 3, 2, ServiceState{Name: "web", Mode: "replicated", DesiredTasks: 3, RunningTasks: 2})
+	if ok, msg := e.lock("w1"); ok || msg != "service web runs 2 of 3 tasks (Swarm s1, seen by m2)" {
+		t.Fatalf("missing replica must block: %s", msg)
+	}
+	e.report("m2", "v2.0.3", 3, 2)
+
 	// m1 is upgraded but the Swarm still sees it down: keep the lock.
 	e.now = e.now.Add(time.Minute)
 	if d := e.report("m1", "v3.0.0", 3, 2); d.MaintenanceRequired {
@@ -152,7 +166,13 @@ func TestMaintenanceLockFollowsSwarmHealth(t *testing.T) {
 	if _, held := e.s.Store.Locks(e.now)["m1"]; !held {
 		t.Fatal("lock must be kept until the Swarm is healthy")
 	}
-	// Once a manager sees all nodes ready, the next report releases it.
+	// All nodes are back but a service update is still rolling out.
+	updating := ServiceState{Name: "api", Mode: "replicated", DesiredTasks: 2, RunningTasks: 2, UpdateState: "updating"}
+	e.report("m1", "v3.0.0", 4, 3, updating)
+	if _, held := e.s.Store.Locks(e.now)["m1"]; !held {
+		t.Fatal("lock must be kept while a service is not at its target configuration")
+	}
+	// Once a manager sees everything ready, the next report releases it.
 	e.report("m2", "v2.0.3", 4, 3)
 	e.report("m1", "v3.0.0", 4, 3)
 	if _, held := e.s.Store.Locks(e.now)["m1"]; held {
@@ -175,6 +195,7 @@ func TestMaintenanceLockFollowsSwarmHealth(t *testing.T) {
 		`burmilla_fleet_server_maintenance_required{hostname="w1",swarm="s1",environment="prod",reason="os_upgrade"} 1`,
 		`burmilla_fleet_swarm_healthy{swarm="s1"} 0`,
 		`burmilla_fleet_swarm_nodes{swarm="s1",state="ready"} 4`,
+		`burmilla_fleet_swarm_services{swarm="s1",state="ready"} 5`,
 		`burmilla_fleet_config_info{revision="abc"} 1`,
 		`burmilla_fleet_config_sync_success 1`,
 	} {

@@ -12,7 +12,8 @@ which are part of a Docker Swarm:
 * Every server has a **maintenance window**. Upgrades and **scheduled
   restarts** only happen inside it.
 * Servers take a **maintenance lock** before they upgrade or restart. Locks are
-  only handed out while the **whole Swarm is healthy** and are only released
+  only handed out while the **whole Swarm is healthy**, including every
+  service running all its tasks with its target configuration, and are only released
   once the server is back and the Swarm is healthy again, so a rollout never
   takes down more nodes than you allow and stops on the first broken node.
 * Servers report back their state; Fleet Manager publishes it as
@@ -57,8 +58,10 @@ only when the server is inside its window, a slot is free in its Swarm +
 Environment, and the whole Swarm is healthy: every other member (that does not
 hold a lock) has reported recently, is `active` in the Swarm and not in error,
 and the freshest manager report shows no more nodes down or managers
-unreachable than there are servers in maintenance. Managers additionally must
-not break the Raft quorum. The lock is released when the server reports the
+unreachable than there are servers in maintenance, and **every service runs all
+of its desired tasks, healthy and with its target configuration** (no update in
+progress, paused or rolling back; a global service may miss the tasks of the
+servers in maintenance). Managers additionally must not break the Raft quorum. The lock is released when the server reports the
 target state **and** the Swarm is healthy again. Details are in
 [docs/api.md](docs/api.md); `GET /api/v1/swarms` shows why a Swarm is blocked.
 
@@ -136,7 +139,8 @@ maintenance windows. Put it on a trusted network. Full contract:
 | `burmilla_fleet_server_boot_timestamp_seconds` | hostname, swarm, environment |
 | `burmilla_fleet_maintenance_locks` | swarm, environment |
 | `burmilla_fleet_swarm_healthy` | swarm |
-| `burmilla_fleet_swarm_nodes` / `burmilla_fleet_swarm_managers` | swarm, state |
+| `burmilla_fleet_swarm_nodes` / `burmilla_fleet_swarm_managers` / `burmilla_fleet_swarm_services` | swarm, state |
+| `burmilla_fleet_swarm_service_running_tasks` / `burmilla_fleet_swarm_service_desired_tasks` | swarm, service, mode, update_state (services which are not ready) |
 | `burmilla_fleet_config_info` | revision |
 | `burmilla_fleet_config_last_sync_timestamp_seconds`, `burmilla_fleet_config_sync_success`, `burmilla_fleet_config_sync_failures_total` | |
 
