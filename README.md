@@ -48,9 +48,50 @@ inherited `defaults` < `swarms.<swarm>` < `swarms.<swarm>.environments.<env>`
 | `max_uptime`                 | Scheduled restart when uptime exceeds this, e.g. `30d` or `720h` |
 | `restart_after`              | One-off restart: servers booted before this RFC 3339 time restart in their next window |
 | `check_interval`             | How often clients check in, default `5m` |
+| `ssh.authorized_keys`        | SSH public keys of the `rancher` and `docker` users managed by fleet-client. The list of the most specific level wins. `[]` removes all managed keys, unset = not managed |
+| `ssh.password_authentication`| `true` / `false` enables or disables password logins in sshd. Unset = not managed |
+| `ssh.disable_after_boot`     | Hardening: stop sshd once the server has been up this long (e.g. `10m`) and no SSH session is active. `0` = enable sshd, unset = not managed |
 
 A `servers:` entry can also set `swarm` and `environment`, which then win
 over what the client was configured with.
+
+### SSH access
+
+fleet-client applies `ssh` settings on every check-in, without a maintenance
+lock, because they do not interrupt running workloads:
+
+* `authorized_keys` are written to a block marked
+  `# BEGIN burmilla-fleet-manager` / `# END burmilla-fleet-manager` in
+  `~/.ssh/authorized_keys` of the `rancher` and `docker` users. Keys outside
+  of that block (cloud-config `ssh_authorized_keys`, added by hand) are left
+  alone, so removing a key from `fleet.yml` removes it only from the block.
+* `password_authentication` is written to
+  `/etc/ssh/sshd_config.d/50-burmilla-fleet.conf` in the console container
+  and sshd is reloaded. Open sessions are kept.
+
+* `disable_after_boot` stops sshd of the console (`ros console sshd
+  disable --if-idle`) once the server has been up that long and no SSH
+  connection is established. While a session is open fleet-client checks
+  again every minute. sshd starts again after every boot, so SSH is
+  available for the same period after a reboot; `0` enables sshd right away
+  on running servers (console access works as well). Needs a BurmillaOS
+  version with `ros console sshd`.
+
+Make sure servers have working keys before disabling passwords. The applied
+state is reported back and exposed as `burmilla_fleet_server_ssh_in_sync`.
+
+```yaml
+defaults:
+  ssh:
+    authorized_keys:
+      - ssh-ed25519 AAAA... alice@example.com
+swarms:
+  swarm-a:
+    environments:
+      production:
+        ssh:
+          password_authentication: false
+```
 
 ### Authentication
 
@@ -91,8 +132,13 @@ and the freshest manager report shows no more nodes down or managers
 unreachable than there are servers in maintenance, and **every service runs all
 of its desired tasks, healthy and with its target configuration** (no update in
 progress, paused or rolling back; a global service may miss the tasks of the
-servers in maintenance). Managers additionally must not break the Raft quorum. The lock is released when the server reports the
-target state **and** the Swarm is healthy again. Details are in
+servers in maintenance), and **every local container with a restart policy**
+(`always`, `unless-stopped`, `on-failure`; not Swarm tasks) on those servers
+runs and, with a health check, is healthy. Managers additionally must not break
+the Raft quorum. Servers outside of a Swarm only need their own local
+containers to be ready. The lock is released when the server reports the target
+state **and** its local containers and the Swarm are healthy again. Label a
+container `io.burmilla.fleet.ignore=true` to leave it out of the check. Details are in
 [docs/api.md](docs/api.md); `GET /api/v1/swarms` shows why a Swarm is blocked.
 
 Because of this, run `fleet-client` on all members of a Swarm, managers
@@ -171,6 +217,11 @@ optional, per Swarm + Environment (see above). Full contract:
 | `burmilla_fleet_server_state` | hostname, swarm, environment, state |
 | `burmilla_fleet_server_last_report_timestamp_seconds` | hostname, swarm, environment (0 = never reported) |
 | `burmilla_fleet_server_boot_timestamp_seconds` | hostname, swarm, environment |
+| `burmilla_fleet_server_containers` | hostname, swarm, environment, state (local containers with a restart policy: ready / not_ready) |
+| `burmilla_fleet_server_container_not_ready` | hostname, swarm, environment, container, state, health |
+| `burmilla_fleet_server_ssh_in_sync` | hostname, swarm, environment (managed SSH keys and password setting applied) |
+| `burmilla_fleet_server_ssh_password_authentication` | hostname, swarm, environment (sshd accepts passwords) |
+| `burmilla_fleet_server_ssh_disabled` | hostname, swarm, environment (sshd disabled by `disable_after_boot`) |
 | `burmilla_fleet_maintenance_locks` | swarm, environment |
 | `burmilla_fleet_swarm_healthy` | swarm |
 | `burmilla_fleet_swarm_nodes` / `burmilla_fleet_swarm_managers` / `burmilla_fleet_swarm_services` | swarm, state |

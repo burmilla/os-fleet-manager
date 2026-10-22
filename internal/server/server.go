@@ -97,6 +97,7 @@ func (s *Server) desired(cfg *fleet.Config, hostname, swarm, environment string,
 	d := cfg.Resolve(hostname, swarm, environment, now)
 	if ok {
 		d.Evaluate(rec.Report.OSVersion, rec.Report.DockerVersion, rec.Report.BootTime, now)
+		d.CheckSSH(rec.Report.SSH)
 	}
 	return d
 }
