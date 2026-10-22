@@ -5,7 +5,7 @@ version: "3.8"
 
 services:
   fleet-manager:
-    image: burmilla/os-fleet-manager:v1.0.0
+    image: burmilla/os-fleet-manager:v1.0.2
     environment:
       FLEET_GIT_URL: https://github.com/example/fleet-config.git
       # Azure DevOps: https://dev.azure.com/<org>/<project>/_git/<repo>
