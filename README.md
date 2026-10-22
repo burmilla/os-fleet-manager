@@ -35,7 +35,7 @@ The client side is the optional `fleet-client` system service in
 
 `fleet.yml` in the root of the configuration repository. Settings are
 inherited `defaults` < `swarms.<swarm>` < `swarms.<swarm>.environments.<env>`
-< `servers.<hostname>`. See [examples/fleet-config/fleet.yml](examples/fleet-config/fleet.yml).
+< `swarms.<swarm>.servers.<hostname>` < `swarms.<swarm>.environments.<env>.servers.<hostname>`. See [examples/fleet-config/fleet.yml](examples/fleet-config/fleet.yml).
 
 | Setting                      | Description |
 |------------------------------|-------------|
@@ -52,48 +52,52 @@ inherited `defaults` < `swarms.<swarm>` < `swarms.<swarm>.environments.<env>`
 | `ssh.password_authentication`| `true` / `false` enables or disables password logins in sshd. Unset = not managed |
 | `ssh.disable_after_boot`     | Hardening: stop sshd once the server has been up this long (e.g. `10m`) and no SSH session is active. `0` = enable sshd, unset = not managed |
 
-A `servers:` entry can also set `swarm` and `environment`, which then win
-over what the client was configured with.
+A server's Swarm and Environment come only from the client: fleet-client
+calls `/api/v1/swarms/<FLEET_SWARM>/<FLEET_ENVIRONMENT>/...`. The
+configuration never moves a server, so the settings of a Swarm or
+environment, including the `servers:` entries under it, only apply to servers
+which call that path. A `servers:` entry only adjusts settings of a member,
+e.g. its own maintenance window:
+
+```yaml
+swarms:
+  swarm-a:
+    environments:
+      production:
+        servers:
+          swarm-a-mgr-01:
+            maintenance_window: {days: [sat], start: "02:00", duration: 1h}
+servers:              # servers which are not in any Swarm (/api/v1/...)
+  legacy-01:
+    upgrade_policy: none
+```
 
 Servers which are not members of a Docker Swarm can be grouped with a
 `standalone: true` entry under `swarms:` (clients use `FLEET_SWARM=<group>`).
-Such a group has environments, `htpasswd`, delegation and maintenance slots
-like a Swarm, but before and after maintenance only the server itself is
-checked (its local containers), not the other members. Servers without any
-Swarm or group only get the defaults and `servers:` entries of `fleet.yml`.
+Such a group has environments, `htpasswd` and maintenance slots like a Swarm,
+but before and after maintenance only the server itself is checked (its local
+containers), not the other members. Servers without any Swarm or group call
+`/api/v1/...` and only get the defaults and the top-level `servers:` entries.
 
 ### Splitting the configuration per team
 
 Swarms can be kept in their own files next to `fleet.yml`, so the parts can
-be delegated to different teams with CODEOWNERS (GitHub) or path-based
-required reviewers (Azure DevOps) and branch protection:
+be owned by different teams with CODEOWNERS (GitHub) or path-based required
+reviewers (Azure DevOps) and branch protection:
 
 ```
-fleet.yml                          defaults and anything not delegated (platform team)
-swarms/swarm-a.yml                 Swarm settings, environments and servers (team A)
-swarms/swarm-a/production.yml      one environment and its servers (e.g. production ops)
+fleet.yml                          defaults and servers outside Swarms (platform team)
+swarms/swarm-a.yml                 Swarm settings and environments (team A)
+swarms/swarm-a/production.yml      one environment (e.g. production ops)
 ```
 
-* `swarms/<swarm>.yml` has the same fields as a `swarms.<swarm>` entry plus
-  `servers:`; those servers belong to that Swarm.
+* `swarms/<swarm>.yml` has the same fields as a `swarms.<swarm>` entry.
 * `swarms/<swarm>/<environment>.yml` has the fields of an environment
-  (including `htpasswd`) plus `servers:`; those servers belong to that Swarm
-  environment.
-* A file cannot move a server to another Swarm or environment, and a Swarm,
-  environment or server may be defined only once across all files, so one
-  team cannot override what another team's file defines.
-* Server entries need a delegation in `fleet.yml`: `delegation.<swarm>.servers`
-  lists the hostname patterns (`path.Match` syntax) which the files of that
-  Swarm may list. Without it they cannot list any server, so a team cannot
-  pull another team's server into its Swarm. Servers not listed anywhere still
-  follow the Swarm and Environment configured on them.
-
-  ```yaml
-  # fleet.yml, owned by the platform team
-  delegation:
-    swarm-a:
-      servers: ["swarm-a-*"]
-  ```
+  (including `htpasswd` and `servers:`).
+* A Swarm or environment may be defined only once across all files, so one
+  team cannot override what another team's file defines. Because membership
+  comes from the clients, a team's file only affects servers which call that
+  team's Swarm + Environment; it cannot pull in or change servers of others.
 * If any file is invalid, Fleet Manager keeps serving the previous
   configuration (`burmilla_fleet_config_sync_success` is 0). Run
   `fleet-manager validate fleet.yml` in CI of the configuration repository
@@ -157,12 +161,11 @@ swarms:
 
 * Only bcrypt entries are accepted, and a user name can be used by one Swarm +
   Environment only. Several entries allow rotating passwords.
-* Credentials bind the client: with them a server always acts in their Swarm +
-  Environment, whatever it claims.
-* A server that belongs to a protected Swarm + Environment (through `servers:`
-  or its earlier reports) must use that one's credentials for config, reports
-  and locks, so another environment's servers cannot report for it or take its
-  maintenance locks. To move such a server, list it under `servers:`.
+* Credentials are valid only for the paths of their own Swarm + Environment.
+* A server which reports to a protected Swarm + Environment cannot be claimed
+  through another path (to send reports or take locks for it) until it has
+  stopped reporting there for three check intervals. A server that really
+  moves just waits that long.
 * Unprotected Swarm + Environments, and `/api/v1/servers`, `/api/v1/swarms`
   and `/metrics`, stay open.
 
@@ -256,12 +259,15 @@ The API only serves versions and maintenance windows, so authentication is
 optional, per Swarm + Environment (see above). Full contract:
 [docs/api.md](docs/api.md).
 
+`{base}` is `/api/v1/swarms/<swarm>/<environment>` for members of a Swarm or
+standalone group, and `/api/v1` for servers outside of them.
+
 | Endpoint                            | Use |
 |-------------------------------------|-----|
-| `GET /api/v1/config?hostname=…`     | Desired state of a server |
-| `POST /api/v1/report`               | Client status report, returns the desired state |
-| `POST /api/v1/maintenance/lock`     | Take a maintenance lock |
-| `DELETE /api/v1/maintenance/lock`   | Release a lock manually |
+| `GET {base}/config?hostname=…`      | Desired state of a server |
+| `POST {base}/report`                | Client status report, returns the desired state |
+| `POST {base}/maintenance/lock`      | Take a maintenance lock |
+| `DELETE {base}/maintenance/lock`    | Release a lock manually |
 | `GET /api/v1/servers`               | All servers with reported and desired state |
 | `GET /api/v1/swarms`                | Swarm health as used for lock decisions |
 | `GET /metrics`                      | Prometheus metrics |

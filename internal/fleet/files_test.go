@@ -25,9 +25,9 @@ func writeFiles(t *testing.T, files map[string]string) string {
 
 func TestSplitFiles(t *testing.T) {
 	path := writeFiles(t, map[string]string{
-		"fleet.yml":          "defaults: {os_version: v3.0.0}\ndelegation: {a: {servers: [\"a*\"]}}\n",
-		"swarms/a.yml":       "upgrade_policy: auto\nservers:\n  a1: {environment: prod}\n",
-		"swarms/a/prod.yml":  "os_version: v3.0.1\nservers:\n  a2: {}\n",
+		"fleet.yml":          "defaults: {os_version: v3.0.0}\nservers: {solo: {os_version: v2.0.3}}\n",
+		"swarms/a.yml":       "upgrade_policy: auto\nservers:\n  a1: {docker_version: docker-29.9.1}\n",
+		"swarms/a/prod.yml":  "os_version: v3.0.1\nservers:\n  a2: {max_uptime: 7d}\n",
 		"swarms/b/test.yaml": "os_version: v3.0.2\n",
 		"swarms/README.md":   "not a config file",
 		"swarms/.hidden.yml": "garbage: [",
@@ -39,17 +39,32 @@ func TestSplitFiles(t *testing.T) {
 		t.Fatal(err)
 	}
 	now := time.Now()
-	for host, want := range map[string]string{"a1": "v3.0.1", "a2": "v3.0.1"} {
-		d := cfg.Resolve(host, "", "", now)
-		if d.Swarm != "a" || d.Environment != "prod" || d.OSVersion != want || d.UpgradePolicy != PolicyAuto {
+	for _, host := range []string{"a1", "a2"} {
+		d := cfg.Resolve(host, "a", "prod", now)
+		if !d.Known || d.Swarm != "a" || d.Environment != "prod" || d.OSVersion != "v3.0.1" || d.UpgradePolicy != PolicyAuto {
 			t.Fatalf("%s: %+v", host, d)
 		}
+	}
+	if d := cfg.Resolve("a1", "a", "prod", now); d.DockerVersion != "docker-29.9.1" {
+		t.Fatalf("swarm level server entry: %+v", d)
+	}
+	if d := cfg.Resolve("a2", "a", "empty", now); d.Known || d.MaxUptimeSeconds != 0 {
+		t.Fatalf("environment server entry applies only in its environment: %+v", d)
+	}
+	if d := cfg.Resolve("solo", "a", "prod", now); d.Known || d.OSVersion != "v3.0.1" {
+		t.Fatalf("top level server entry applies only outside Swarms: %+v", d)
+	}
+	if d := cfg.Resolve("solo", "", "", now); !d.Known || d.OSVersion != "v2.0.3" {
+		t.Fatalf("server outside Swarms: %+v", d)
 	}
 	if d := cfg.Resolve("x", "b", "test", now); d.OSVersion != "v3.0.2" {
 		t.Fatalf("swarm b only defined by its environment directory: %+v", d)
 	}
 	if _, ok := cfg.Swarms["a"].Environments["empty"]; !ok {
 		t.Fatal("empty environment file should define the environment")
+	}
+	if got := cfg.Listed(); got["a2"] != [2]string{"a", "prod"} || got["solo"] != [2]string{} {
+		t.Fatalf("listed servers: %v", got)
 	}
 }
 
@@ -67,34 +82,13 @@ func TestSplitFilesConflicts(t *testing.T) {
 			"swarms/a.yml":      "environments: {prod: {}}\n",
 			"swarms/a/prod.yml": "os_version: v3.0.1\n",
 		}, "swarms/a/prod.yml: environment prod of swarm a is already defined"},
-		"server twice": {map[string]string{
-			"fleet.yml":    "servers: {s1: {}}\ndelegation: {a: {servers: [\"s*\"]}}\n",
-			"swarms/a.yml": "servers: {s1: {}}\n",
-		}, "swarms/a.yml: server s1 is already defined in fleet.yml"},
-		"server in two teams": {map[string]string{
-			"fleet.yml":    "delegation: {a: {servers: [\"s*\"]}, b: {servers: [s1]}}\n",
-			"swarms/a.yml": "servers: {s1: {}}\n",
-			"swarms/b.yml": "servers: {s1: {}}\n",
-		}, "swarms/b.yml: server s1 is already defined in swarms/a.yml"},
-		"not delegated": {map[string]string{
-			"fleet.yml":         "delegation: {a: {servers: [\"a-*\"]}}\n",
-			"swarms/a/prod.yml": "servers: {a-1: {}, b-1: {}}\n",
-		}, "swarms/a/prod.yml: server b-1 is not delegated to swarm a"},
-		"no delegation": {map[string]string{
+		"old server membership": {map[string]string{
 			"fleet.yml":    "",
-			"swarms/b.yml": "servers: {b-1: {}}\n",
-		}, "swarms/b.yml: server b-1 is not delegated to swarm b"},
-		"bad pattern": {map[string]string{
-			"fleet.yml": "delegation: {a: {servers: [\"[\"]}}\n",
-		}, `delegation.a.servers: invalid pattern "["`},
-		"move to other swarm": {map[string]string{
-			"fleet.yml":    "",
-			"swarms/a.yml": "servers: {s1: {swarm: b}}\n",
-		}, `swarms/a.yml: server s1 cannot be moved to swarm "b" from here`},
-		"move to other environment": {map[string]string{
-			"fleet.yml":         "",
-			"swarms/a/prod.yml": "servers: {s1: {environment: test}}\n",
-		}, `swarms/a/prod.yml: server s1 cannot be moved to environment "test" from here`},
+			"swarms/a.yml": "servers: {s1: {environment: prod}}\n",
+		}, "field environment not found"},
+		"bad name": {map[string]string{
+			"fleet.yml": "swarms: {a: {environments: {\"x/y\": {}}}}\n",
+		}, "invalid"},
 		"unknown field": {map[string]string{
 			"fleet.yml":    "",
 			"swarms/a.yml": "os_verison: v3.0.0\n",

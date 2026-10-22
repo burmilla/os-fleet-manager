@@ -26,11 +26,7 @@ swarms:
     environments:
       prod:
         max_concurrent_maintenance: 2
-servers:
-  m1: {swarm: s1, environment: prod}
-  m2: {swarm: s1, environment: prod}
-  m3: {swarm: s1, environment: prod}
-  w1: {swarm: s1, environment: prod}
+        servers: {m1: {}, m2: {}, m3: {}, w1: {}}
 `
 
 type env struct {
@@ -38,6 +34,8 @@ type env struct {
 	s   *Server
 	url string
 	now time.Time
+	// api is the API path the test servers use: their Swarm + Environment.
+	api string
 }
 
 func newEnv(t *testing.T) *env {
@@ -47,7 +45,7 @@ func newEnv(t *testing.T) *env {
 		t.Fatal(err)
 	}
 	cfg.Revision = "abc"
-	e := &env{t: t, now: time.Date(2026, 10, 22, 12, 0, 0, 0, time.UTC)}
+	e := &env{t: t, now: time.Date(2026, 10, 22, 12, 0, 0, 0, time.UTC), api: "/api/v1/swarms/s1/prod"}
 	e.s = New(NewStore(t.TempDir(), time.Hour))
 	e.s.Now = func() time.Time { return e.now }
 	e.s.SetConfig(cfg)
@@ -88,7 +86,7 @@ func (e *env) report(host, osVersion string, ready, reachable int, notReady ...S
 		st.Manager, st.Nodes, st.NodesReady, st.Managers, st.ManagersReachable = true, 4, ready, 3, reachable
 		st.Services, st.ServicesReady, st.ServicesNotReady = 5, 5-len(notReady), notReady
 	}
-	code, body := e.post("/api/v1/report", Report{Hostname: host, OSVersion: osVersion, DockerVersion: "docker-29.9.2",
+	code, body := e.post(e.api+"/report", Report{Hostname: host, OSVersion: osVersion, DockerVersion: "docker-29.9.2",
 		BootTime: e.now.Add(-time.Hour), State: "idle", SwarmStatus: st})
 	if code != 200 {
 		e.t.Fatalf("report %s: %d %s", host, code, body)
@@ -100,7 +98,7 @@ func (e *env) report(host, osVersion string, ready, reachable int, notReady ...S
 
 func (e *env) lock(host string) (bool, string) {
 	e.t.Helper()
-	code, body := e.post("/api/v1/maintenance/lock", lockRequest{Hostname: host, Reason: "os_upgrade"})
+	code, body := e.post(e.api+"/maintenance/lock", lockRequest{Hostname: host, Reason: "os_upgrade"})
 	var r lockResponse
 	_ = json.Unmarshal(body, &r)
 	return code == 200 && r.Granted, r.Message
@@ -109,9 +107,14 @@ func (e *env) lock(host string) (bool, string) {
 func TestConfigEndpoint(t *testing.T) {
 	e := newEnv(t)
 	var d fleet.Desired
-	_ = json.Unmarshal(e.get("/api/v1/config?hostname=m1"), &d)
-	if d.Swarm != "s1" || d.OSVersion != "v3.0.0" || d.ConfigRevision != "abc" || !d.MaintenanceWindowActive {
+	_ = json.Unmarshal(e.get("/api/v1/swarms/s1/prod/config?hostname=m1"), &d)
+	if d.Swarm != "s1" || d.Environment != "prod" || !d.Known || d.OSVersion != "v3.0.0" || d.ConfigRevision != "abc" || !d.MaintenanceWindowActive {
 		t.Fatalf("%+v", d)
+	}
+	d = fleet.Desired{}
+	_ = json.Unmarshal(e.get("/api/v1/config?hostname=m1"), &d)
+	if d.Swarm != "" || d.Known {
+		t.Fatalf("membership comes from the path only: %+v", d)
 	}
 	resp, _ := http.Get(e.url + "/api/v1/config")
 	if resp.StatusCode != http.StatusBadRequest {
@@ -216,6 +219,7 @@ func TestMaintenanceLockFollowsSwarmHealth(t *testing.T) {
 
 func TestStandaloneServerAndScheduledRestart(t *testing.T) {
 	e := newEnv(t)
+	e.api = "/api/v1"
 	cfg, _ := fleet.Parse([]byte("defaults: {max_uptime: 30d, maintenance_window: {start: '02:00', duration: 2h}}"))
 	e.s.SetConfig(cfg)
 	e.now = time.Date(2026, 10, 22, 2, 30, 0, 0, time.UTC)
@@ -318,18 +322,21 @@ swarms:
     environments:
       prod: {htpasswd: ["s1-prod:` + string(hash) + `"]}
       test: {}
-servers:
-  pinned: {swarm: s1, environment: prod}
 `))
 	if err != nil {
 		t.Fatal(err)
 	}
 	e := newEnv(t)
 	e.s.SetConfig(cfg)
+	const prod, test = "/api/v1/swarms/s1/prod", "/api/v1/swarms/s1/test"
 
-	do := func(user, pass string, rep Report) (int, string) {
-		data, _ := json.Marshal(rep)
-		req, _ := http.NewRequest(http.MethodPost, e.url+"/api/v1/report", bytes.NewReader(data))
+	do := func(method, path, user, pass string, rep any) (int, string) {
+		var body io.Reader
+		if rep != nil {
+			data, _ := json.Marshal(rep)
+			body = bytes.NewReader(data)
+		}
+		req, _ := http.NewRequest(method, e.url+path, body)
 		if user != "" {
 			req.SetBasicAuth(user, pass)
 		}
@@ -337,55 +344,47 @@ servers:
 		if err != nil {
 			t.Fatal(err)
 		}
-		body, _ := io.ReadAll(resp.Body)
-		return resp.StatusCode, string(body)
+		out, _ := io.ReadAll(resp.Body)
+		return resp.StatusCode, string(out)
 	}
 
-	if code, _ := do("", "", Report{Hostname: "a", Swarm: "s1", Environment: "prod"}); code != http.StatusUnauthorized {
+	if code, _ := do("POST", prod+"/report", "", "", Report{Hostname: "a"}); code != http.StatusUnauthorized {
 		t.Fatalf("protected environment without credentials: %d", code)
 	}
-	if code, _ := do("s1-prod", "wrong", Report{Hostname: "a", Swarm: "s1", Environment: "prod"}); code != http.StatusUnauthorized {
+	if code, _ := do("POST", prod+"/report", "s1-prod", "wrong", Report{Hostname: "a"}); code != http.StatusUnauthorized {
 		t.Fatalf("wrong password: %d", code)
 	}
-	if code, _ := do("", "", Report{Hostname: "pinned"}); code != http.StatusUnauthorized {
-		t.Fatalf("server pinned to a protected environment without credentials: %d", code)
+	if code, body := do("POST", test+"/report", "s1-prod", "secret", Report{Hostname: "a"}); code != http.StatusForbidden || !strings.Contains(body, "credentials are for s1/prod") {
+		t.Fatalf("credentials of another environment: %d %s", code, body)
 	}
-	// Credentials decide the Swarm + Environment, whatever the body says.
-	code, body := do("s1-prod", "secret", Report{Hostname: "a", Swarm: "s1", Environment: "test"})
+	// The path decides the Swarm + Environment, whatever the body says.
+	code, body := do("POST", prod+"/report", "s1-prod", "secret", Report{Hostname: "a", Swarm: "s1", Environment: "test"})
 	if code != 200 || !strings.Contains(body, `"environment":"prod"`) {
 		t.Fatalf("valid credentials: %d %s", code, body)
 	}
 	if got := e.s.Store.Records()["a"].Report.Environment; got != "prod" {
 		t.Fatalf("report stored in %s", got)
 	}
-	// Once known in prod, the host cannot be taken over without its credentials.
-	if code, _ := do("", "", Report{Hostname: "a", Swarm: "s1", Environment: "test"}); code != http.StatusUnauthorized {
-		t.Fatalf("takeover without credentials: %d", code)
+	// A host reporting to prod cannot be taken over from elsewhere...
+	for _, path := range []string{test, "/api/v1"} {
+		if code, body := do("POST", path+"/report", "", "", Report{Hostname: "a"}); code != http.StatusForbidden || !strings.Contains(body, "a reports to s1/prod") {
+			t.Fatalf("takeover from %s: %d %s", path, code, body)
+		}
 	}
-	if code, _ := do("", "", Report{Hostname: "b", Swarm: "s1", Environment: "test"}); code != 200 {
+	if code, _ := do("POST", test+"/report", "", "", Report{Hostname: "b"}); code != 200 {
 		t.Fatalf("unprotected environment: %d", code)
 	}
+	// ...until it has stopped reporting there.
+	e.now = e.now.Add(time.Hour)
+	if code, body := do("POST", test+"/report", "", "", Report{Hostname: "a"}); code != 200 {
+		t.Fatalf("stale host may move: %d %s", code, body)
+	}
+	do("POST", prod+"/report", "s1-prod", "secret", Report{Hostname: "a"})
 
-	cfg2, err := fleet.Parse([]byte(`
-swarms:
-  s1:
-    environments:
-      prod: {htpasswd: ["s1-prod:` + string(hash) + `"]}
-      test: {htpasswd: ["s1-test:` + string(hash) + `"]}
-`))
-	if err != nil {
-		t.Fatal(err)
+	if code, _ := do("DELETE", prod+"/maintenance/lock?hostname=a", "", "", nil); code != http.StatusUnauthorized {
+		t.Fatalf("unlock without credentials: %d", code)
 	}
-	e.s.SetConfig(cfg2)
-	if code, body := do("s1-test", "secret", Report{Hostname: "a"}); code != http.StatusForbidden || !strings.Contains(body, "belongs to s1/prod") {
-		t.Fatalf("credentials of another environment: %d %s", code, body)
-	}
-
-	req, _ := http.NewRequest(http.MethodDelete, e.url+"/api/v1/maintenance/lock?hostname=a", nil)
-	if r, _ := http.DefaultClient.Do(req); r.StatusCode != http.StatusUnauthorized {
-		t.Fatalf("unlock without credentials: %d", r.StatusCode)
-	}
-	resp, _ := http.Get(e.url + "/api/v1/config?hostname=a")
+	resp, _ := http.Get(e.url + prod + "/config?hostname=a")
 	if resp.StatusCode != http.StatusUnauthorized || resp.Header.Get("WWW-Authenticate") == "" {
 		t.Fatalf("config without credentials: %d", resp.StatusCode)
 	}
@@ -403,6 +402,7 @@ swarms:
 
 func TestSSHStatus(t *testing.T) {
 	e := newEnv(t)
+	e.api = "/api/v1"
 	key := "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIOiuTuZpapVCjAUUGcXj2zMLBbrr0QyMsca1UEx+EBWQ alice@example.com"
 	cfg, err := fleet.Parse([]byte("defaults: {ssh: {authorized_keys: [\"" + key + "\"], password_authentication: false}}"))
 	if err != nil {
@@ -445,6 +445,7 @@ func TestSSHStatus(t *testing.T) {
 
 func TestLocalContainers(t *testing.T) {
 	e := newEnv(t)
+	e.api = "/api/v1"
 	cfg, _ := fleet.Parse([]byte("defaults: {max_uptime: 30d}"))
 	e.s.SetConfig(cfg)
 	boot := e.now.Add(-40 * 24 * time.Hour)
@@ -482,7 +483,7 @@ func TestLocalContainersInSwarm(t *testing.T) {
 		e.report(h, "v2.9.0", 4, 3)
 	}
 	st := &SwarmStatus{NodeID: "w1", ClusterID: "c1", LocalNodeState: "active"}
-	e.post("/api/v1/report", Report{Hostname: "w1", OSVersion: "v3.0.0", DockerVersion: "docker-29.9.2", BootTime: e.now.Add(-time.Hour),
+	e.post(e.api+"/report", Report{Hostname: "w1", OSVersion: "v3.0.0", DockerVersion: "docker-29.9.2", BootTime: e.now.Add(-time.Hour),
 		State: "idle", SwarmStatus: st, Containers: &ContainerStatus{Containers: 1, ContainersNotReady: []ContainerState{
 			{Name: "agent", State: "exited", ExitCode: 137, RestartPolicy: "unless-stopped"}}}})
 	if ok, msg := e.lock("m1"); ok || msg != "container agent on w1 exited with code 137" {
@@ -499,20 +500,17 @@ swarms:
     standalone: true
     environments:
       prod: {max_concurrent_maintenance: 1}
-servers:
-  e1: {swarm: edge, environment: prod}
-  e2: {swarm: edge, environment: prod}
-  e3: {swarm: edge, environment: prod}
 `))
 	if err != nil {
 		t.Fatal(err)
 	}
 	e.s.SetConfig(cfg)
+	e.api = "/api/v1/swarms/edge/prod"
 	boot := e.now.Add(-40 * 24 * time.Hour)
 	broken := &ContainerStatus{Containers: 1, ContainersNotReady: []ContainerState{{Name: "app", State: "restarting"}}}
 	// No Swarm status at all: standalone servers are not Swarm members.
-	e.post("/api/v1/report", Report{Hostname: "e1", BootTime: boot})
-	_, body := e.post("/api/v1/report", Report{Hostname: "e2", BootTime: boot, Containers: broken})
+	e.post(e.api+"/report", Report{Hostname: "e1", BootTime: boot})
+	_, body := e.post(e.api+"/report", Report{Hostname: "e2", BootTime: boot, Containers: broken})
 	var d fleet.Desired
 	_ = json.Unmarshal(body, &d)
 	if !d.Standalone {

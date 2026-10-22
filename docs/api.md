@@ -1,21 +1,32 @@
 # Fleet Manager API (v1)
 
-The API is plain HTTP(S) + JSON. Authentication is optional: a Swarm +
-Environment with `htpasswd` entries in `fleet.yml` requires HTTP Basic
-authentication with one of them on `GET /api/v1/config`, `POST /api/v1/report`
-and the maintenance lock endpoints.
+The API is plain HTTP(S) + JSON.
 
-* Credentials decide the Swarm + Environment of the request; the `swarm` /
-  `environment` sent by the client are ignored.
-* A hostname that belongs to a protected Swarm + Environment, by the
-  `servers:` section or by its earlier reports, needs that one's credentials:
-  `401` without credentials, `403` with credentials of another one.
-* Wrong credentials give `401` with `WWW-Authenticate: Basic`.
+The server endpoints (`config`, `report`, `maintenance/lock`) live under a
+base path that names the Swarm + Environment of the server:
+
+* `/api/v1/swarms/{swarm}/{environment}` for members of a Swarm or a
+  standalone group,
+* `/api/v1` for servers outside of them.
+
+The path is the only source of membership: `swarm` / `environment` in a
+request body are ignored, and the configuration never moves a server.
+`{base}` below stands for one of these paths.
+
+Authentication is optional: a Swarm + Environment with `htpasswd` entries in
+`fleet.yml` requires HTTP Basic authentication with one of them on its
+server endpoints.
+
+* Missing or wrong credentials give `401` with `WWW-Authenticate: Basic`.
+* Credentials of another Swarm + Environment give `403`.
+* A hostname which reports to a protected Swarm + Environment cannot be used
+  through any other base path (`403`) until its reports there are older than
+  3 × its check interval + 1 minute.
 * `/api/v1/servers`, `/api/v1/swarms`, `/metrics` and `/healthz` are open.
 
 All timestamps are RFC 3339 in UTC.
 
-## `GET /api/v1/config`
+## `GET {base}/config`
 
 Returns the desired configuration for one server.
 
@@ -24,11 +35,8 @@ Query parameters:
 | Name          | Required | Description                                                     |
 |---------------|----------|-----------------------------------------------------------------|
 | `hostname`    | yes      | Server hostname. This is the server identity in the fleet.      |
-| `swarm`       | no       | Swarm the client thinks it belongs to (`FLEET_SWARM`).          |
-| `environment` | no       | Environment the client thinks it belongs to (`FLEET_ENVIRONMENT`). |
 
-If the server is listed under `servers:` in `fleet.yml` and that entry sets
-`swarm` / `environment`, those values win over what the client sent.
+`swarm` / `environment` in the response are those of the base path.
 
 Response `200`:
 
@@ -69,7 +77,8 @@ Response `200`:
 }
 ```
 
-* `known` is `true` when the hostname is listed under `servers:`.
+* `known` is `true` when a `servers:` entry for the hostname applies to this
+  base path.
 * `standalone` is `true` when `swarm` is a group of servers outside of a
   Docker Swarm (`standalone: true`); only the server itself is health checked.
 * `os_version` is the tag of `os_image` (`ros os upgrade -i <os_image>:<os_version>`).
@@ -100,15 +109,13 @@ Response `200`:
 
 `400` if `hostname` is missing. `503` if no configuration has been loaded yet.
 
-## `POST /api/v1/report`
+## `POST {base}/report`
 
 Clients report their current state. Body:
 
 ```json
 {
   "hostname": "node-01",
-  "swarm": "swarm-a",
-  "environment": "production",
   "os_version": "v3.0.0",
   "docker_version": "docker-29.9.2",
   "kernel_version": "6.12.50-burmilla",
@@ -175,15 +182,15 @@ If the server holds a maintenance lock, no maintenance is required any more,
 its local containers are ready and the whole Swarm is healthy again (see
 below), the lock is released.
 
-Response `200` with the same document as `GET /api/v1/config` so a client can
+Response `200` with the same document as `GET {base}/config` so a client can
 report and fetch in one round trip.
 
-## `POST /api/v1/maintenance/lock`
+## `POST {base}/maintenance/lock`
 
 Takes a maintenance slot before an upgrade or a restart. Body:
 
 ```json
-{"hostname": "node-01", "swarm": "swarm-a", "environment": "production", "reason": "os_upgrade"}
+{"hostname": "node-01", "reason": "os_upgrade"}
 ```
 
 The lock is granted only when all of these hold:
@@ -192,8 +199,8 @@ The lock is granted only when all of these hold:
 2. Fewer than `max_concurrent_maintenance` servers of the same Swarm +
    Environment hold a lock.
 3. The whole Swarm is healthy. Servers that hold a lock are allowed to be down,
-   every other server of the Swarm (by report or by the `servers:` section)
-   must:
+   every other server of the Swarm (servers reporting to the Swarm, and
+   servers listed under its `servers:` sections which never reported) must:
    * have reported within 3 × its check interval + 1 minute,
    * not report `state: error`,
    * report `local_node_state: active` and the same Swarm cluster ID.
@@ -207,7 +214,8 @@ The lock is granted only when all of these hold:
 4. If the requester is a manager, taking it down must keep the Raft quorum
    (with 3+ managers), or no other manager may be unavailable (1–2 managers).
 
-Servers that are not part of a Swarm (empty `swarm`) only need 1 and 2.
+Servers that are not part of a Swarm (`/api/v1`) and members of a standalone
+group only need 1 and 2, and their own local containers to be ready.
 
 * `200` – granted (or renewed if the host already held it):
   `{"granted": true, "expires": "2026-10-25T00:30:00Z", "holders": ["node-01"]}`
@@ -220,7 +228,7 @@ the previous one has fully rejoined. Locks also expire after `FLEET_LOCK_TTL`
 (default `30m`); a server that is still broken after that keeps blocking the
 Swarm through the health check.
 
-## `DELETE /api/v1/maintenance/lock?hostname=node-01`
+## `DELETE {base}/maintenance/lock?hostname=node-01`
 
 Releases the lock held by the host (manual override). `204`.
 
@@ -236,10 +244,10 @@ Everything the manager knows, for humans and scripts:
   {
     "hostname": "node-01",
     "known": true,
-    "reported": { "...": "last POST /api/v1/report body" },
+    "reported": { "...": "last POST {base}/report body" },
     "last_seen": "2026-10-22T12:00:00Z",
     "remote_addr": "10.0.0.11",
-    "desired": { "...": "GET /api/v1/config response" },
+    "desired": { "...": "GET {base}/config response" },
     "up_to_date": true,
     "lock": null
   }

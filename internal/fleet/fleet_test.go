@@ -13,9 +13,9 @@ func TestExampleConfig(t *testing.T) {
 	}
 	now := time.Date(2026, 10, 24, 0, 30, 0, 0, time.UTC) // Sat 03:30 Helsinki
 
-	d := cfg.Resolve("swarm-a-mgr-02", "wrong", "wrong", now)
+	d := cfg.Resolve("swarm-a-mgr-02", "swarm-a", "production", now)
 	if !d.Known || d.Swarm != "swarm-a" || d.Environment != "production" {
-		t.Fatalf("server entry should override swarm/environment: %+v", d)
+		t.Fatalf("server entry of swarm-a production: %+v", d)
 	}
 	if d.OSVersion != "v3.0.0" || d.DockerVersion != "docker-29.9.1" || d.UpgradePolicy != PolicyAuto {
 		t.Fatalf("unexpected versions: %+v", d)
@@ -27,7 +27,16 @@ func TestExampleConfig(t *testing.T) {
 		t.Fatalf("unexpected defaults: %+v", d)
 	}
 
-	d = cfg.Resolve("swarm-a-mgr-01", "", "", now)
+	// Membership comes only from the client: the same hostname calling
+	// another path does not get the settings of swarm-a production.
+	if d := cfg.Resolve("swarm-a-mgr-02", "swarm-a", "test", now); d.Known || d.OSVersion != "v3.0.1" {
+		t.Fatalf("server entry must not apply outside its environment: %+v", d)
+	}
+	if d := cfg.Resolve("swarm-a-mgr-02", "", "", now); d.Known || d.Swarm != "" {
+		t.Fatalf("server entry must not apply outside its Swarm: %+v", d)
+	}
+
+	d = cfg.Resolve("swarm-a-mgr-01", "swarm-a", "production", now)
 	if d.MaintenanceWindowActive || d.MaintenanceWindowNextStart != "2026-10-31T00:00:00Z" {
 		// Summer time ends on 25 Oct, so 02:00 Helsinki is 00:00 UTC.
 		t.Fatalf("mgr-01 window is over for this week: %+v", d)
@@ -140,7 +149,7 @@ func TestSSHSettings(t *testing.T) {
 	}
 	now := time.Now()
 
-	prod := cfg.Resolve("swarm-a-mgr-01", "", "", now)
+	prod := cfg.Resolve("swarm-a-mgr-01", "swarm-a", "production", now)
 	if len(prod.SSH.AuthorizedKeys) != 2 || prod.SSH.PasswordAuthentication == nil || *prod.SSH.PasswordAuthentication {
 		t.Fatalf("production should inherit keys and disable passwords: %+v", prod.SSH)
 	}

@@ -3,12 +3,16 @@
 #
 # Settings are inherited: defaults < swarm < swarm environment < server.
 #
-# Swarms can live in fleet.yml or in their own files, which can be
-# delegated to different teams (see CODEOWNERS):
-#   swarms/<swarm>.yml                 a Swarm, its environments and servers
-#   swarms/<swarm>/<environment>.yml   one environment and its servers
-# A Swarm, environment or server can be defined only once, and those files
-# can only list servers delegated to their Swarm below.
+# Servers join a Swarm + Environment by calling its API path
+# (FLEET_SWARM / FLEET_ENVIRONMENT in fleet-client), so membership is never
+# decided by this repository. Settings of a Swarm or environment, and the
+# servers: entries under them, apply only to servers which call that path.
+#
+# Swarms can live in fleet.yml or in their own files, which can be owned by
+# different teams (see CODEOWNERS):
+#   swarms/<swarm>.yml                 a Swarm and its environments
+#   swarms/<swarm>/<environment>.yml   one environment
+# A Swarm or environment can be defined only once.
 
 defaults:
   os_image: burmilla/os            # use your registry mirror here if needed
@@ -35,14 +39,7 @@ defaults:
     # is active. sshd starts again after a reboot, or right away with "0".
     disable_after_boot: 10m
 
-# Which hostnames the files of each Swarm may list under servers:
-# (path.Match patterns). Keep this file owned by the platform team.
-delegation:
-  swarm-a:
-    servers: ["swarm-a-*"]
-  edge:
-    servers: ["edge-*"]
-
+# Per-server settings of servers which are not in any Swarm.
 servers:
   legacy-01:
     upgrade_policy: none           # pinned, report only

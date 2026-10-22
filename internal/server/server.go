@@ -7,6 +7,7 @@ import (
 	"net"
 	"net/http"
 	"sort"
+	"strings"
 	"sync"
 	"sync/atomic"
 	"time"
@@ -53,10 +54,15 @@ func (s *Server) SyncResult(err error) {
 
 func (s *Server) Handler() http.Handler {
 	mux := http.NewServeMux()
-	mux.HandleFunc("GET /api/v1/config", s.handleConfig)
-	mux.HandleFunc("POST /api/v1/report", s.handleReport)
-	mux.HandleFunc("POST /api/v1/maintenance/lock", s.handleLock)
-	mux.HandleFunc("DELETE /api/v1/maintenance/lock", s.handleUnlock)
+	// Servers in a Swarm (or standalone group) use the paths under
+	// /api/v1/swarms/<swarm>/<environment>/, other servers the short ones.
+	// The path decides which Swarm and environment a server belongs to.
+	for _, prefix := range []string{"/api/v1", "/api/v1/swarms/{swarm}/{environment}"} {
+		mux.HandleFunc("GET "+prefix+"/config", s.handleConfig)
+		mux.HandleFunc("POST "+prefix+"/report", s.handleReport)
+		mux.HandleFunc("POST "+prefix+"/maintenance/lock", s.handleLock)
+		mux.HandleFunc("DELETE "+prefix+"/maintenance/lock", s.handleUnlock)
+	}
 	mux.HandleFunc("GET /api/v1/servers", s.handleServers)
 	mux.HandleFunc("GET /api/v1/swarms", s.handleSwarms)
 	mux.HandleFunc("GET /metrics", s.handleMetrics)
@@ -78,22 +84,19 @@ func remoteIP(r *http.Request) string {
 	return host
 }
 
+// membership returns the Swarm and environment of a request's path.
+func membership(r *http.Request) (string, string) {
+	return r.PathValue("swarm"), r.PathValue("environment")
+}
+
 func lockGroup(d fleet.Desired) string {
 	return d.Swarm + "/" + d.Environment
 }
 
-// desired resolves the configuration of a server and evaluates it against
-// its last report. Swarm and environment fall back to the reported ones.
+// desired resolves the configuration of a server in the given Swarm and
+// environment and evaluates it against its last report.
 func (s *Server) desired(cfg *fleet.Config, hostname, swarm, environment string, records map[string]record, now time.Time) fleet.Desired {
 	rec, ok := records[hostname]
-	if ok {
-		if swarm == "" {
-			swarm = rec.Report.Swarm
-		}
-		if environment == "" {
-			environment = rec.Report.Environment
-		}
-	}
 	d := cfg.Resolve(hostname, swarm, environment, now)
 	if ok {
 		d.Evaluate(rec.Report.OSVersion, rec.Report.DockerVersion, rec.Report.BootTime, now)
@@ -123,8 +126,8 @@ func (s *Server) handleConfig(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	records := s.Store.Records()
-	swarm, environment, err := s.authorize(cfg, r, hostname, q.Get("swarm"), q.Get("environment"), records)
-	if err != nil {
+	swarm, environment := membership(r)
+	if err := s.authorize(cfg, r, hostname, swarm, environment, records); err != nil {
 		writeAuthError(w, err)
 		return
 	}
@@ -146,8 +149,8 @@ func (s *Server) handleReport(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "hostname is required", http.StatusBadRequest)
 		return
 	}
-	var err error
-	if rep.Swarm, rep.Environment, err = s.authorize(cfg, r, rep.Hostname, rep.Swarm, rep.Environment, s.Store.Records()); err != nil {
+	rep.Swarm, rep.Environment = membership(r)
+	if err := s.authorize(cfg, r, rep.Hostname, rep.Swarm, rep.Environment, s.Store.Records()); err != nil {
 		writeAuthError(w, err)
 		return
 	}
@@ -167,10 +170,8 @@ func (s *Server) handleReport(w http.ResponseWriter, r *http.Request) {
 }
 
 type lockRequest struct {
-	Hostname    string `json:"hostname"`
-	Swarm       string `json:"swarm"`
-	Environment string `json:"environment"`
-	Reason      string `json:"reason"`
+	Hostname string `json:"hostname"`
+	Reason   string `json:"reason"`
 }
 
 type lockResponse struct {
@@ -193,8 +194,8 @@ func (s *Server) handleLock(w http.ResponseWriter, r *http.Request) {
 	}
 	now := s.Now()
 	records := s.Store.Records()
-	swarm, environment, err := s.authorize(cfg, r, req.Hostname, req.Swarm, req.Environment, records)
-	if err != nil {
+	swarm, environment := membership(r)
+	if err := s.authorize(cfg, r, req.Hostname, swarm, environment, records); err != nil {
 		writeAuthError(w, err)
 		return
 	}
@@ -223,7 +224,8 @@ func (s *Server) handleUnlock(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if cfg := s.Config(); cfg != nil {
-		if _, _, err := s.authorize(cfg, r, hostname, "", "", s.Store.Records()); err != nil {
+		swarm, environment := membership(r)
+		if err := s.authorize(cfg, r, hostname, swarm, environment, s.Store.Records()); err != nil {
 			writeAuthError(w, err)
 			return
 		}
@@ -259,20 +261,23 @@ func (s *Server) statuses() []ServerStatus {
 	records := s.Store.Records()
 	locks := s.Store.Locks(now)
 
-	names := map[string]bool{}
-	for h := range records {
-		names[h] = true
+	// Where each server belongs: its last report, else its lock, else
+	// where the configuration lists it.
+	where := map[string][2]string{}
+	for h, sw := range cfg.Listed() {
+		where[h] = sw
 	}
-	for h := range cfg.Servers {
-		names[h] = true
+	for h, l := range locks {
+		swarm, env, _ := strings.Cut(l.Group, "/")
+		where[h] = [2]string{swarm, env}
 	}
-	for h := range locks {
-		names[h] = true
+	for h, rec := range records {
+		where[h] = [2]string{rec.Report.Swarm, rec.Report.Environment}
 	}
 
-	out := make([]ServerStatus, 0, len(names))
-	for h := range names {
-		st := ServerStatus{Hostname: h, Desired: s.desired(cfg, h, "", "", records, now)}
+	out := make([]ServerStatus, 0, len(where))
+	for h, sw := range where {
+		st := ServerStatus{Hostname: h, Desired: s.desired(cfg, h, sw[0], sw[1], records, now)}
 		st.Known = st.Desired.Known
 		if l, ok := locks[h]; ok {
 			st.Lock = &LockStatus{Reason: l.Reason, Expires: l.Expires}

@@ -1,5 +1,6 @@
 # Swarm swarm-a, owned by team A (see CODEOWNERS). Settings here apply to
-# all of its environments. Servers listed here belong to swarm-a.
+# all of its environments. Clients use FLEET_SWARM=swarm-a and
+# FLEET_ENVIRONMENT=test or production.
 upgrade_policy: auto
 environments:
   test:

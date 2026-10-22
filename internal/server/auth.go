@@ -58,37 +58,33 @@ func writeAuthError(w http.ResponseWriter, err error) {
 	http.Error(w, ae.msg, ae.code)
 }
 
-// authorize decides which Swarm + Environment a request for hostname acts
-// in. Credentials bind the request to their Swarm + Environment. A server
-// which belongs to a protected Swarm + Environment, by the servers: section
-// or by its earlier reports, must use credentials of exactly that one.
-func (s *Server) authorize(cfg *fleet.Config, r *http.Request, hostname, swarm, environment string, records map[string]record) (string, string, error) {
+// authorize checks that a request may act for hostname as a member of
+// swarm/environment (from the API path). A protected Swarm + Environment
+// needs credentials of exactly that one. A server which is reporting to a
+// protected Swarm + Environment cannot be claimed from elsewhere until its
+// reports there have gone stale, so a moved server waits a few check
+// intervals before it can report in its new place.
+func (s *Server) authorize(cfg *fleet.Config, r *http.Request, hostname, swarm, environment string, records map[string]record) error {
 	cred, err := authenticate(cfg, r)
 	if err != nil {
-		return "", "", &authError{http.StatusUnauthorized, "invalid credentials"}
+		return &authError{http.StatusUnauthorized, "invalid credentials"}
 	}
-
-	// Where the server belongs regardless of what this request claims.
-	var boundSwarm, boundEnv, source string
-	if srv, ok := cfg.Servers[hostname]; ok && (srv.Swarm != "" || srv.Environment != "") {
-		boundSwarm, boundEnv, source = srv.Swarm, srv.Environment, "the servers: section of the fleet configuration"
-	} else if rec, ok := records[hostname]; ok && cfg.Protected(rec.Report.Swarm, rec.Report.Environment) {
-		boundSwarm, boundEnv, source = rec.Report.Swarm, rec.Report.Environment, "its earlier reports (add it to servers: to move it)"
+	if cred != nil && (cred.Swarm != swarm || cred.Environment != environment) {
+		return &authError{http.StatusForbidden, fmt.Sprintf("credentials are for %s/%s, not for %s/%s",
+			cred.Swarm, cred.Environment, swarm, environment)}
 	}
-
-	if cred != nil {
-		if source != "" && (boundSwarm != cred.Swarm || boundEnv != cred.Environment) {
-			return "", "", &authError{http.StatusForbidden, fmt.Sprintf("%s belongs to %s/%s by %s, not to %s/%s",
-				hostname, boundSwarm, boundEnv, source, cred.Swarm, cred.Environment)}
+	if cred == nil && cfg.Protected(swarm, environment) {
+		return &authError{http.StatusUnauthorized, fmt.Sprintf("Swarm %s environment %s requires authentication", swarm, environment)}
+	}
+	if rec, ok := records[hostname]; ok {
+		oldSwarm, oldEnv := rec.Report.Swarm, rec.Report.Environment
+		if (oldSwarm != swarm || oldEnv != environment) && cfg.Protected(oldSwarm, oldEnv) {
+			d := cfg.Resolve(hostname, oldSwarm, oldEnv, s.Now())
+			if s.Now().Sub(rec.LastSeen) <= staleAfter(d) {
+				return &authError{http.StatusForbidden, fmt.Sprintf("%s reports to %s/%s; it can move once it has stopped reporting there for %s",
+					hostname, oldSwarm, oldEnv, staleAfter(d))}
+			}
 		}
-		return cred.Swarm, cred.Environment, nil
 	}
-
-	if source != "" {
-		swarm, environment = boundSwarm, boundEnv
-	}
-	if cfg.Protected(swarm, environment) {
-		return "", "", &authError{http.StatusUnauthorized, fmt.Sprintf("Swarm %s environment %s requires authentication", swarm, environment)}
-	}
-	return swarm, environment, nil
+	return nil
 }

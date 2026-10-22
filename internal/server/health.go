@@ -20,22 +20,19 @@ type member struct {
 	desired  fleet.Desired
 }
 
-// swarmMembers returns every server which belongs to the Swarm, either by
-// its last report or by the servers: section of the configuration.
+// swarmMembers returns every server which reports to the Swarm, and the
+// servers listed for it in the configuration which have never reported.
 func (s *Server) swarmMembers(cfg *fleet.Config, swarm string, records map[string]record, now time.Time) []member {
-	seen := map[string]bool{}
 	var out []member
 	for h, rec := range records {
-		d := s.desired(cfg, h, "", "", records, now)
-		if d.Swarm == swarm {
+		if rec.Report.Swarm == swarm {
 			rec := rec
-			out = append(out, member{h, &rec, d})
-			seen[h] = true
+			out = append(out, member{h, &rec, s.desired(cfg, h, swarm, rec.Report.Environment, records, now)})
 		}
 	}
-	for h, srv := range cfg.Servers {
-		if srv.Swarm == swarm && !seen[h] {
-			out = append(out, member{h, nil, cfg.Resolve(h, "", "", now)})
+	for h, where := range cfg.Listed() {
+		if _, reported := records[h]; !reported && where[0] == swarm {
+			out = append(out, member{h, nil, cfg.Resolve(h, swarm, where[1], now)})
 		}
 	}
 	sort.Slice(out, func(i, j int) bool { return out[i].hostname < out[j].hostname })

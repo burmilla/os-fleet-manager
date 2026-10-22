@@ -68,38 +68,40 @@ type SSH struct {
 	Disabled bool `yaml:"-" json:"disabled,omitempty"`
 }
 
+// Which Swarm and environment a server belongs to is decided by the
+// server itself (the API path its client uses), never by the
+// configuration. servers: entries only adjust settings of servers which
+// are members of the Swarm or environment they are listed in, so a team
+// can only affect its own servers.
+
 type Swarm struct {
 	Settings `yaml:",inline"`
 	// Standalone marks a group of servers which are not members of a
-	// Docker Swarm. It has environments, htpasswd, delegation and
-	// maintenance slots like a Swarm, but the health check before and after
-	// maintenance only looks at the server itself.
+	// Docker Swarm. It has environments, htpasswd and maintenance slots
+	// like a Swarm, but the health check before and after maintenance
+	// only looks at the server itself.
 	Standalone   bool                   `yaml:"standalone,omitempty"`
 	Environments map[string]Environment `yaml:"environments,omitempty"`
+	// Servers adjusts settings of members of this Swarm by hostname.
+	Servers map[string]Settings `yaml:"servers,omitempty"`
 }
 
 type Environment struct {
 	Settings `yaml:",inline"`
 	// Htpasswd lines (user:bcrypt-hash, e.g. from htpasswd -nbB) which
 	// protect this Swarm + Environment. Servers in it must authenticate
-	// with one of them, and the credentials bind a client to it.
+	// with one of them.
 	Htpasswd []string `yaml:"htpasswd,omitempty"`
-}
-
-type Server struct {
-	Settings    `yaml:",inline"`
-	Swarm       string `yaml:"swarm,omitempty"`
-	Environment string `yaml:"environment,omitempty"`
+	// Servers adjusts settings of members of this environment by hostname.
+	Servers map[string]Settings `yaml:"servers,omitempty"`
 }
 
 // Config is the content of fleet.yml.
 type Config struct {
-	Defaults Settings          `yaml:"defaults"`
-	Swarms   map[string]Swarm  `yaml:"swarms,omitempty"`
-	Servers  map[string]Server `yaml:"servers,omitempty"`
-	// Delegation limits what the files in the swarms directory may
-	// define. Only fleet.yml can set it.
-	Delegation map[string]Delegation `yaml:"delegation,omitempty"`
+	Defaults Settings         `yaml:"defaults"`
+	Swarms   map[string]Swarm `yaml:"swarms,omitempty"`
+	// Servers adjusts settings of servers which are not in any Swarm.
+	Servers map[string]Settings `yaml:"servers,omitempty"`
 
 	// Revision is the Git commit the configuration was loaded from.
 	Revision string `yaml:"-"`
@@ -202,13 +204,33 @@ func (c *Config) Validate() error {
 	if err := check("defaults", c.Defaults); err != nil {
 		return err
 	}
+	checkServers := func(where string, servers map[string]Settings) error {
+		for h, srv := range servers {
+			if err := check(where+".servers."+h, srv); err != nil {
+				return err
+			}
+		}
+		return nil
+	}
 	for name, sw := range c.Swarms {
+		if err := validName(name); err != nil {
+			return fmt.Errorf("swarms.%s: %w", name, err)
+		}
 		if err := check("swarms."+name, sw.Settings); err != nil {
+			return err
+		}
+		if err := checkServers("swarms."+name, sw.Servers); err != nil {
 			return err
 		}
 		for env, e := range sw.Environments {
 			where := "swarms." + name + ".environments." + env
+			if err := validName(env); err != nil {
+				return fmt.Errorf("%s: %w", where, err)
+			}
 			if err := check(where, e.Settings); err != nil {
+				return err
+			}
+			if err := checkServers(where, e.Servers); err != nil {
 				return err
 			}
 			for _, line := range e.Htpasswd {
@@ -223,10 +245,14 @@ func (c *Config) Validate() error {
 			}
 		}
 	}
-	for name, srv := range c.Servers {
-		if err := check("servers."+name, srv.Settings); err != nil {
-			return err
-		}
+	return checkServers("", c.Servers)
+}
+
+// validName: Swarm and environment names are part of API paths and file
+// names.
+func validName(name string) error {
+	if name == "" || name == "." || name == ".." || strings.ContainsAny(name, "/\\?#%") {
+		return fmt.Errorf("invalid name %q", name)
 	}
 	return nil
 }
@@ -376,19 +402,9 @@ func merge(dst *Settings, src Settings) {
 	}
 }
 
-// Resolve returns the desired state of a server. swarm and environment are
-// the values reported by the client; a servers: entry overrides them.
+// Resolve returns the desired state of a server which is a member of the
+// given Swarm and environment (empty: not in a Swarm).
 func (c *Config) Resolve(hostname, swarm, environment string, now time.Time) Desired {
-	srv, known := c.Servers[hostname]
-	if known {
-		if srv.Swarm != "" {
-			swarm = srv.Swarm
-		}
-		if srv.Environment != "" {
-			environment = srv.Environment
-		}
-	}
-
 	s := Settings{
 		OSImage:                  DefaultOSImage,
 		UpgradePolicy:            PolicyNone,
@@ -396,14 +412,26 @@ func (c *Config) Resolve(hostname, swarm, environment string, now time.Time) Des
 		CheckInterval:            DefaultCheckInterval.String(),
 	}
 	merge(&s, c.Defaults)
-	if sw, ok := c.Swarms[swarm]; ok {
+	known := false
+	if swarm == "" {
+		if srv, ok := c.Servers[hostname]; ok {
+			merge(&s, srv)
+			known = true
+		}
+	} else if sw, ok := c.Swarms[swarm]; ok {
 		merge(&s, sw.Settings)
-		if env, ok := sw.Environments[environment]; ok {
+		env, envOK := sw.Environments[environment]
+		if envOK {
 			merge(&s, env.Settings)
 		}
-	}
-	if known {
-		merge(&s, srv.Settings)
+		if srv, ok := sw.Servers[hostname]; ok {
+			merge(&s, srv)
+			known = true
+		}
+		if srv, ok := env.Servers[hostname]; envOK && ok {
+			merge(&s, srv)
+			known = true
+		}
 	}
 
 	interval, _ := time.ParseDuration(s.CheckInterval)
@@ -461,6 +489,43 @@ func (c *Config) Credentials() map[string]Credential {
 				user, hash, _ := strings.Cut(line, ":")
 				out[user] = Credential{Swarm: name, Environment: env, User: user, Hash: hash}
 			}
+		}
+	}
+	return out
+}
+
+// Listed returns the servers listed in the configuration with the Swarm
+// and environment they are listed in, for status pages. A hostname listed
+// in several places is reported once.
+func (c *Config) Listed() map[string][2]string {
+	out := map[string][2]string{}
+	add := func(h, swarm, env string) {
+		if _, ok := out[h]; !ok {
+			out[h] = [2]string{swarm, env}
+		}
+	}
+	for h := range c.Servers {
+		add(h, "", "")
+	}
+	names := make([]string, 0, len(c.Swarms))
+	for name := range c.Swarms {
+		names = append(names, name)
+	}
+	slices.Sort(names)
+	for _, name := range names {
+		sw := c.Swarms[name]
+		envs := make([]string, 0, len(sw.Environments))
+		for env := range sw.Environments {
+			envs = append(envs, env)
+		}
+		slices.Sort(envs)
+		for _, env := range envs {
+			for h := range sw.Environments[env].Servers {
+				add(h, name, env)
+			}
+		}
+		for h := range sw.Servers {
+			add(h, name, "")
 		}
 	}
 	return out

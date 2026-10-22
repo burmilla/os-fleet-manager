@@ -157,7 +157,7 @@ func validate(args []string) {
 	for _, sw := range cfg.Swarms {
 		envs += len(sw.Environments)
 	}
-	fmt.Printf("%s is valid: %d swarms, %d environments, %d servers\n", path, len(cfg.Swarms), envs, len(cfg.Servers))
+	fmt.Printf("%s is valid: %d swarms, %d environments, %d servers\n", path, len(cfg.Swarms), envs, len(cfg.Listed()))
 }
 
 func trimNewline(b []byte) []byte {
