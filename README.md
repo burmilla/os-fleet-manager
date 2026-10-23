@@ -228,7 +228,7 @@ included.
 docker run -d --name fleet-manager -p 8080:8080 -v fleet-data:/data \
   -e FLEET_GIT_URL=https://github.com/example/fleet-config.git \
   -e FLEET_GIT_TOKEN=github_pat_... \
-  burmilla/os-fleet-manager:v1.1.1
+  burmilla/os-fleet-manager:v1.1.2
 ```
 
 For Docker Swarm see [deploy/docker-stack.yml](deploy/docker-stack.yml). It runs
@@ -274,10 +274,13 @@ Tokens:
 * **GitHub**: a fine-grained personal access token with *Contents: read-only*
   on the configuration repository.
 * **Azure DevOps**: a PAT with *Code (Read)* scope. URL format
-  `https://dev.azure.com/<org>/<project>/_git/<repo>`.
+  `https://dev.azure.com/<org>/<project>/_git/<repo>`; old
+  `https://<org>.visualstudio.com/...` URLs work too.
 
-The token is passed to git as an HTTP header through the environment and is
-never written to disk. If a sync or the new configuration is invalid, the last
+The token is passed to git through the environment by a credential helper and
+is never written to disk. A token file may end with a newline and may come
+from Windows (byte order mark, CRLF). A rejected token shows up as
+`Authentication failed` in the log; check the scope and expiry of the token. If a sync or the new configuration is invalid, the last
 good configuration stays active and `burmilla_fleet_config_sync_success` drops
 to 0.
 

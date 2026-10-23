@@ -2,6 +2,9 @@ package gitsync
 
 import (
 	"context"
+	"net/http"
+	"net/http/cgi"
+	"net/http/httptest"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -143,5 +146,56 @@ func TestSyncExistingFullClone(t *testing.T) {
 	repo := &Repo{URL: "file://" + src, Branch: "main", Dir: dir}
 	if _, err := repo.Sync(context.Background()); err != nil {
 		t.Fatal(err)
+	}
+}
+
+// TestSyncHTTPAuthRedirect serves the repository over smart HTTP behind
+// basic authentication and a redirect to another host, as Azure DevOps
+// does for visualstudio.com URLs.
+func TestSyncHTTPAuthRedirect(t *testing.T) {
+	backend, err := exec.LookPath("git")
+	if err != nil {
+		t.Skip("git not installed")
+	}
+	src := t.TempDir()
+	run(t, src, "init", "--quiet", "--initial-branch=main")
+	if err := os.WriteFile(filepath.Join(src, "fleet.yml"), []byte("one"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	run(t, src, "add", ".")
+	run(t, src, "commit", "--quiet", "-m", "one")
+
+	git := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, req *http.Request) {
+		if user, pass, ok := req.BasicAuth(); !ok || user != "git" || pass != "secret" {
+			w.Header().Set("WWW-Authenticate", `Basic realm="git"`)
+			http.Error(w, "unauthorized", http.StatusUnauthorized)
+			return
+		}
+		(&cgi.Handler{
+			Path: backend,
+			Args: []string{"http-backend"},
+			Env:  []string{"GIT_PROJECT_ROOT=" + filepath.Dir(src), "GIT_HTTP_EXPORT_ALL=1"},
+		}).ServeHTTP(w, req)
+	}))
+	defer git.Close()
+	// Redirect from another host name, so that curl drops headers set by git.
+	target := strings.Replace(git.URL, "127.0.0.1", "localhost", 1)
+	front := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, req *http.Request) {
+		http.Redirect(w, req, target+req.URL.RequestURI(), http.StatusFound)
+	}))
+	defer front.Close()
+
+	url := front.URL + "/" + filepath.Base(src)
+	repo := &Repo{URL: url, Branch: "main", Token: "secret", Dir: filepath.Join(t.TempDir(), "repo")}
+	if _, err := repo.Sync(context.Background()); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := repo.Sync(context.Background()); err != nil {
+		t.Fatal(err)
+	}
+
+	bad := &Repo{URL: url, Branch: "main", Token: "wrong", Dir: filepath.Join(t.TempDir(), "repo")}
+	if _, err := bad.Sync(context.Background()); err == nil || !strings.Contains(err.Error(), "Authentication failed") || strings.Contains(err.Error(), "wrong") {
+		t.Fatalf("wrong token: %v", err)
 	}
 }

@@ -6,7 +6,6 @@ package gitsync
 import (
 	"bytes"
 	"context"
-	"encoding/base64"
 	"fmt"
 	"os"
 	"os/exec"
@@ -36,6 +35,10 @@ func ValidPath(p string) bool {
 	return filepath.IsLocal(p) && first != ".git"
 }
 
+// credentialHelper answers git's credential requests from the
+// environment of the git process.
+const credentialHelper = `!f() { test "$1" = get && printf 'username=%s\npassword=%s\n' "$FLEET_GIT_CREDENTIAL_USERNAME" "$FLEET_GIT_CREDENTIAL_TOKEN"; }; f`
+
 func (r *Repo) env() []string {
 	env := append(os.Environ(), "GIT_TERMINAL_PROMPT=0")
 	if r.Token != "" {
@@ -43,13 +46,21 @@ func (r *Repo) env() []string {
 		if user == "" {
 			user = "git"
 		}
-		// Pass the credential as a header through environment so that it
-		// is never written to .git/config or visible in the process list.
-		auth := base64.StdEncoding.EncodeToString([]byte(user + ":" + r.Token))
+		// Pass the credential through a credential helper reading the
+		// environment so that it is never written to .git/config or
+		// visible in the process list. Unlike an Authorization header it
+		// is also sent after a redirect to another host (e.g. Azure DevOps
+		// visualstudio.com to dev.azure.com), and git reports a rejected
+		// token as an authentication failure.
 		env = append(env,
-			"GIT_CONFIG_COUNT=1",
-			"GIT_CONFIG_KEY_0=http.extraHeader",
-			"GIT_CONFIG_VALUE_0=Authorization: Basic "+auth,
+			"FLEET_GIT_CREDENTIAL_USERNAME="+user,
+			"FLEET_GIT_CREDENTIAL_TOKEN="+r.Token,
+			"GIT_CONFIG_COUNT=2",
+			// An empty value drops helpers configured elsewhere.
+			"GIT_CONFIG_KEY_0=credential.helper",
+			"GIT_CONFIG_VALUE_0=",
+			"GIT_CONFIG_KEY_1=credential.helper",
+			"GIT_CONFIG_VALUE_1="+credentialHelper,
 		)
 	}
 	return env
@@ -66,6 +77,9 @@ func (r *Repo) git(ctx context.Context, dir string, args ...string) (string, err
 		msg := strings.TrimSpace(out.String())
 		if r.Token != "" {
 			msg = strings.ReplaceAll(msg, r.Token, "***")
+		}
+		if r.Token == "" && strings.Contains(msg, "could not read Username") {
+			msg += " (the repository needs a token: set FLEET_GIT_TOKEN or FLEET_GIT_TOKEN_FILE)"
 		}
 		return "", fmt.Errorf("git %s: %v: %s", args[0], err, msg)
 	}

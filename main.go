@@ -12,6 +12,7 @@ import (
 	"os"
 	"os/signal"
 	"path/filepath"
+	"strings"
 	"syscall"
 	"time"
 	_ "time/tzdata"
@@ -56,7 +57,11 @@ func main() {
 		if err != nil {
 			log.Fatalf("read FLEET_GIT_TOKEN_FILE: %v", err)
 		}
-		token = string(trimNewline(data))
+		// Also drop a byte order mark and spaces of files saved on Windows.
+		token = strings.TrimSpace(strings.TrimPrefix(string(data), "\ufeff"))
+		if token == "" {
+			log.Printf("warning: FLEET_GIT_TOKEN_FILE %s is empty", f)
+		}
 	}
 	repo := &gitsync.Repo{
 		URL:      os.Getenv("FLEET_GIT_URL"),
@@ -162,11 +167,4 @@ func validate(args []string) {
 		envs += len(sw.Environments)
 	}
 	fmt.Printf("%s is valid: %d swarms, %d environments, %d servers\n", path, len(cfg.Swarms), envs, len(cfg.Listed()))
-}
-
-func trimNewline(b []byte) []byte {
-	for len(b) > 0 && (b[len(b)-1] == '\n' || b[len(b)-1] == '\r') {
-		b = b[:len(b)-1]
-	}
-	return b
 }
