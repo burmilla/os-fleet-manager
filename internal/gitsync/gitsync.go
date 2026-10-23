@@ -20,6 +20,20 @@ type Repo struct {
 	Username string
 	Token    string
 	Dir      string
+	// Path limits the checkout to one directory of the repository, so
+	// the configuration can live in a repository used for other things
+	// too. Empty means the whole repository.
+	Path string
+}
+
+// ValidPath reports whether p can be used as Repo.Path: a relative path
+// inside the repository.
+func ValidPath(p string) bool {
+	if p == "" {
+		return true
+	}
+	first, _, _ := strings.Cut(filepath.ToSlash(filepath.Clean(p)), "/")
+	return filepath.IsLocal(p) && first != ".git"
 }
 
 func (r *Repo) env() []string {
@@ -60,26 +74,57 @@ func (r *Repo) git(ctx context.Context, dir string, args ...string) (string, err
 
 // Sync clones the repository on first call and fetches the branch on later
 // calls. It returns the commit hash of the checked out revision.
+//
+// With Path set only that directory is checked out (sparse checkout), and
+// file contents are only downloaded for it where the server supports
+// partial clone (GitHub and Azure DevOps do; others send everything).
 func (r *Repo) Sync(ctx context.Context) (string, error) {
 	branch := r.Branch
 	if branch == "" {
 		branch = "main"
 	}
+	if !ValidPath(r.Path) {
+		return "", fmt.Errorf("invalid repository path %q", r.Path)
+	}
+	target := "FETCH_HEAD"
 	if _, err := os.Stat(filepath.Join(r.Dir, ".git")); err != nil {
+		target = "HEAD"
 		if err := os.MkdirAll(filepath.Dir(r.Dir), 0o755); err != nil {
 			return "", err
 		}
 		_ = os.RemoveAll(r.Dir)
-		if _, err := r.git(ctx, "", "clone", "--quiet", "--depth", "1", "--branch", branch, r.URL, r.Dir); err != nil {
+		if _, err := r.git(ctx, "", "clone", "--quiet", "--depth", "1", "--filter=blob:none", "--no-checkout",
+			"--branch", branch, r.URL, r.Dir); err != nil {
 			return "", err
 		}
 	} else {
-		if _, err := r.git(ctx, r.Dir, "fetch", "--quiet", "--depth", "1", r.URL, branch); err != nil {
+		// origin is also where missing file contents are fetched from.
+		if _, err := r.git(ctx, r.Dir, "remote", "set-url", "origin", r.URL); err != nil {
 			return "", err
 		}
-		if _, err := r.git(ctx, r.Dir, "reset", "--quiet", "--hard", "FETCH_HEAD"); err != nil {
+		fetch := []string{"fetch", "--quiet", "--depth", "1", "origin", branch}
+		// Checkouts made by earlier versions are not partial clones.
+		if partial, _ := r.git(ctx, r.Dir, "config", "--get", "remote.origin.promisor"); partial == "true" {
+			fetch = append(fetch, "--filter=blob:none")
+		}
+		if _, err := r.git(ctx, r.Dir, fetch...); err != nil {
 			return "", err
 		}
 	}
+	sparse := []string{"sparse-checkout", "disable"}
+	if r.Path != "" {
+		sparse = []string{"sparse-checkout", "set", "--", filepath.ToSlash(filepath.Clean(r.Path))}
+	}
+	if _, err := r.git(ctx, r.Dir, sparse...); err != nil {
+		return "", err
+	}
+	if _, err := r.git(ctx, r.Dir, "reset", "--quiet", "--hard", target); err != nil {
+		return "", err
+	}
 	return r.git(ctx, r.Dir, "rev-parse", "HEAD")
+}
+
+// ConfigDir is the directory of the checkout which holds the configuration.
+func (r *Repo) ConfigDir() string {
+	return filepath.Join(r.Dir, r.Path)
 }
