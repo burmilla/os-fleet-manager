@@ -1,29 +1,80 @@
 # Deploy Fleet Manager to Docker Swarm:
 #   printf '%s' "$PAT" | docker secret create fleet_git_token -
+#   docker secret create fleet_tls_cert fleet.example.com.crt
+#   docker secret create fleet_tls_key fleet.example.com.key
 #   docker stack deploy -c docker-stack.yml fleet
+#
+# Hardened: runs as an unprivileged user without capabilities on a read-only
+# root filesystem. The only writable places are the /data volume and a small
+# /tmp. Secrets are readable by the service user only.
 version: "3.8"
 
 services:
   fleet-manager:
     image: burmilla/os-fleet-manager:v1.0.2
+    user: "1000:1000"              # the fleet user of the image, never root
+    read_only: true                # root filesystem is read-only
+    cap_drop: [ALL]                # needs no Linux capabilities (port 8080 > 1024)
     environment:
       FLEET_GIT_URL: https://github.com/example/fleet-config.git
       # Azure DevOps: https://dev.azure.com/<org>/<project>/_git/<repo>
       FLEET_GIT_BRANCH: main
+      # FLEET_GIT_PATH: ops/fleet  # when the configuration is a directory of a shared repository
       FLEET_GIT_TOKEN_FILE: /run/secrets/fleet_git_token
+      # Clients send htpasswd passwords, so serve HTTPS (or put Fleet Manager
+      # behind a TLS reverse proxy and drop these and the secrets).
+      FLEET_TLS_CERT: /run/secrets/fleet_tls_cert
+      FLEET_TLS_KEY: /run/secrets/fleet_tls_key
     secrets:
-      - fleet_git_token
+      - source: fleet_git_token
+        uid: "1000"
+        gid: "1000"
+        mode: 0400
+      - source: fleet_tls_cert
+        uid: "1000"
+        gid: "1000"
+        mode: 0444
+      - source: fleet_tls_key
+        uid: "1000"
+        gid: "1000"
+        mode: 0400
     ports:
-      - "8080:8080"
+      - "8443:8080"
     volumes:
-      - fleet-data:/data
+      - fleet-data:/data           # repository checkout, reports and locks
+      - type: tmpfs                # scratch space for git
+        target: /tmp
+        tmpfs:
+          size: 16777216           # 16 MiB
     deploy:
-      replicas: 1   # singleton; reports and maintenance locks live in /data
+      replicas: 1                  # singleton; reports and maintenance locks live in /data
       placement:
         constraints: [node.role == manager]
+      update_config:
+        order: stop-first          # never two instances writing /data
+      rollback_config:
+        order: stop-first
+      restart_policy:
+        condition: any
+        delay: 5s
+      resources:
+        limits:
+          cpus: "1"
+          memory: 256M
+        reservations:
+          memory: 64M
+    logging:
+      driver: json-file
+      options:
+        max-size: 10m
+        max-file: "3"
 
 secrets:
   fleet_git_token:
+    external: true
+  fleet_tls_cert:
+    external: true
+  fleet_tls_key:
     external: true
 
 volumes:

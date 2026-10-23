@@ -64,6 +64,10 @@ func main() {
 		Username: os.Getenv("FLEET_GIT_USERNAME"),
 		Token:    token,
 		Dir:      filepath.Join(dataDir, "repo"),
+		Path:     os.Getenv("FLEET_GIT_PATH"),
+	}
+	if !gitsync.ValidPath(repo.Path) {
+		log.Fatalf("invalid FLEET_GIT_PATH %q: must be a directory inside the repository", repo.Path)
 	}
 	if repo.URL == "" && localDir == "" {
 		log.Fatal("either FLEET_GIT_URL or FLEET_CONFIG_DIR must be set")
@@ -131,7 +135,7 @@ func load(ctx context.Context, repo *gitsync.Repo, localDir, configFile string) 
 		if revision, err = repo.Sync(syncCtx); err != nil {
 			return nil, err
 		}
-		dir = repo.Dir
+		dir = repo.ConfigDir()
 	}
 	cfg, err := fleet.Load(filepath.Join(dir, configFile))
 	if err != nil {

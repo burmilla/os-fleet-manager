@@ -231,7 +231,10 @@ docker run -d --name fleet-manager -p 8080:8080 -v fleet-data:/data \
   burmilla/os-fleet-manager:v1.0.2
 ```
 
-For Docker Swarm see [deploy/docker-stack.yml](deploy/docker-stack.yml).
+For Docker Swarm see [deploy/docker-stack.yml](deploy/docker-stack.yml). It runs
+Fleet Manager hardened: as an unprivileged user without Linux capabilities, on a
+read-only root filesystem with only `/data` and a small `/tmp` writable, with
+HTTPS, secrets readable by the service user only, and memory/CPU limits.
 Run a **single replica** with a persistent `/data` volume: the last reports
 and the maintenance locks are stored there (`reports.json`, `locks.json`), so
 a restart or a reschedule of the service keeps the locks. A lock is only
@@ -244,13 +247,27 @@ granted once it has been written to disk.
 | `FLEET_GIT_TOKEN`      |              | Personal access token (read-only access to the repository is enough) |
 | `FLEET_GIT_TOKEN_FILE` |              | Read the token from a file, e.g. a Docker secret |
 | `FLEET_GIT_USERNAME`   | `git`        | User name sent with the token |
-| `FLEET_CONFIG_FILE`    | `fleet.yml`  | Path of the configuration inside the repository; the `swarms` directory is read next to it |
+| `FLEET_GIT_PATH`       |              | Directory of the configuration inside the repository, e.g. `ops/fleet`, when the repository is used for other things too. Only that directory is checked out |
+| `FLEET_CONFIG_FILE`    | `fleet.yml`  | Configuration file inside `FLEET_GIT_PATH` (or `FLEET_CONFIG_DIR`); the `swarms` directory is read next to it |
 | `FLEET_CONFIG_DIR`     |              | Use a local directory instead of Git |
 | `FLEET_SYNC_INTERVAL`  | `1m`         | How often the repository is fetched |
 | `FLEET_LOCK_TTL`       | `30m`        | Maintenance lock lifetime |
 | `FLEET_DATA_DIR`       | `/data`      | Repository checkout, last reports and maintenance locks |
 | `FLEET_LISTEN`         | `:8080`      | Listen address |
 | `FLEET_TLS_CERT`, `FLEET_TLS_KEY` |   | Serve HTTPS with this certificate and key |
+
+The configuration can live in a directory of a repository that is used for
+other things too, e.g. an infrastructure monorepo: set `FLEET_GIT_PATH` to that
+directory. Only that directory is checked out (sparse checkout, and a
+blobless partial clone where the server supports it, as GitHub and Azure
+DevOps do). Keep in mind:
+
+* Protect the directory with CODEOWNERS or path-based required reviewers,
+  since anyone who can merge to the branch can change the fleet.
+* The token can still read the whole repository; GitHub and Azure DevOps
+  tokens cannot be limited to one directory.
+* The configuration revision is the commit of the branch, so it also changes
+  with commits outside the directory.
 
 Tokens:
 

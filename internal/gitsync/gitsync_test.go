@@ -56,3 +56,92 @@ func TestSync(t *testing.T) {
 		t.Fatal("token leaked to .git/config")
 	}
 }
+
+func TestSyncPath(t *testing.T) {
+	if _, err := exec.LookPath("git"); err != nil {
+		t.Skip("git not installed")
+	}
+	src := t.TempDir()
+	run(t, src, "init", "--quiet", "--initial-branch=main")
+	// file:// does not use partial clone unless allowed; it still works.
+	run(t, src, "config", "uploadpack.allowFilter", "true")
+	for name, content := range map[string]string{
+		"README.md":                 "app",
+		"src/main.go":               "package main",
+		"ops/fleet/fleet.yml":       "one",
+		"ops/fleet/swarms/a.yml":    "a",
+		"ops/fleet-other/fleet.yml": "other",
+	} {
+		p := filepath.Join(src, name)
+		if err := os.MkdirAll(filepath.Dir(p), 0o755); err != nil {
+			t.Fatal(err)
+		}
+		if err := os.WriteFile(p, []byte(content), 0o644); err != nil {
+			t.Fatal(err)
+		}
+	}
+	run(t, src, "add", ".")
+	run(t, src, "commit", "--quiet", "-m", "init")
+
+	repo := &Repo{URL: "file://" + src, Branch: "main", Dir: filepath.Join(t.TempDir(), "repo"), Path: "ops/fleet"}
+	if _, err := repo.Sync(context.Background()); err != nil {
+		t.Fatal(err)
+	}
+	check := func(want string) {
+		t.Helper()
+		data, err := os.ReadFile(filepath.Join(repo.ConfigDir(), "fleet.yml"))
+		if err != nil || string(data) != want {
+			t.Fatalf("fleet.yml: %q %v", data, err)
+		}
+		if _, err := os.Stat(filepath.Join(repo.ConfigDir(), "swarms", "a.yml")); err != nil {
+			t.Fatal(err)
+		}
+		for _, other := range []string{"src/main.go", "ops/fleet-other/fleet.yml"} {
+			if _, err := os.Stat(filepath.Join(repo.Dir, other)); err == nil {
+				t.Fatalf("%s should not be checked out", other)
+			}
+		}
+	}
+	check("one")
+
+	if err := os.WriteFile(filepath.Join(src, "ops/fleet/fleet.yml"), []byte("two"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	run(t, src, "commit", "--quiet", "-am", "two")
+	if _, err := repo.Sync(context.Background()); err != nil {
+		t.Fatal(err)
+	}
+	check("two")
+
+	for _, bad := range []string{"../x", "/etc", ".git", ".git/hooks"} {
+		if ValidPath(bad) {
+			t.Errorf("%q should be invalid", bad)
+		}
+	}
+	for _, good := range []string{"", "ops/fleet", ".github/fleet", "fleet/"} {
+		if !ValidPath(good) {
+			t.Errorf("%q should be valid", good)
+		}
+	}
+}
+
+// A checkout made by an earlier version (full clone) keeps working.
+func TestSyncExistingFullClone(t *testing.T) {
+	if _, err := exec.LookPath("git"); err != nil {
+		t.Skip("git not installed")
+	}
+	src := t.TempDir()
+	run(t, src, "init", "--quiet", "--initial-branch=main")
+	if err := os.WriteFile(filepath.Join(src, "fleet.yml"), []byte("one"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	run(t, src, "add", ".")
+	run(t, src, "commit", "--quiet", "-m", "one")
+	dir := filepath.Join(t.TempDir(), "repo")
+	run(t, "", "clone", "--quiet", "--depth", "1", "--branch", "main", "file://"+src, dir)
+
+	repo := &Repo{URL: "file://" + src, Branch: "main", Dir: dir}
+	if _, err := repo.Sync(context.Background()); err != nil {
+		t.Fatal(err)
+	}
+}
