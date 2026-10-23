@@ -4,7 +4,9 @@
 package main
 
 import (
+	"bytes"
 	"context"
+	"encoding/binary"
 	"errors"
 	"fmt"
 	"log"
@@ -16,6 +18,8 @@ import (
 	"syscall"
 	"time"
 	_ "time/tzdata"
+	"unicode/utf16"
+	"unicode/utf8"
 
 	"github.com/burmilla/os-fleet-manager/internal/fleet"
 	"github.com/burmilla/os-fleet-manager/internal/gitsync"
@@ -57,8 +61,9 @@ func main() {
 		if err != nil {
 			log.Fatalf("read FLEET_GIT_TOKEN_FILE: %v", err)
 		}
-		// Also drop a byte order mark and spaces of files saved on Windows.
-		token = strings.TrimSpace(strings.TrimPrefix(string(data), "\ufeff"))
+		if token, err = parseToken(data); err != nil {
+			log.Fatalf("FLEET_GIT_TOKEN_FILE %s: %v", f, err)
+		}
 		if token == "" {
 			log.Printf("warning: FLEET_GIT_TOKEN_FILE %s is empty", f)
 		}
@@ -167,4 +172,33 @@ func validate(args []string) {
 		envs += len(sw.Environments)
 	}
 	fmt.Printf("%s is valid: %d swarms, %d environments, %d servers\n", path, len(cfg.Swarms), envs, len(cfg.Listed()))
+}
+
+// parseToken reads a token file which may have been saved on Windows:
+// UTF-16 (e.g. PowerShell 5 redirection), a byte order mark or CRLF.
+func parseToken(data []byte) (string, error) {
+	var order binary.ByteOrder
+	switch {
+	case bytes.HasPrefix(data, []byte{0xff, 0xfe}):
+		order, data = binary.LittleEndian, data[2:]
+	case bytes.HasPrefix(data, []byte{0xfe, 0xff}):
+		order, data = binary.BigEndian, data[2:]
+	case len(data) >= 2 && len(data)%2 == 0 && data[1] == 0:
+		order = binary.LittleEndian
+	case len(data) >= 2 && len(data)%2 == 0 && data[0] == 0:
+		order = binary.BigEndian
+	}
+	s := string(data)
+	if order != nil {
+		u := make([]uint16, len(data)/2)
+		for i := range u {
+			u[i] = order.Uint16(data[2*i:])
+		}
+		s = string(utf16.Decode(u))
+	}
+	s = strings.TrimSpace(strings.TrimPrefix(s, "\ufeff"))
+	if i := strings.IndexFunc(s, func(r rune) bool { return r < 0x21 || r == 0x7f || r == utf8.RuneError }); i >= 0 {
+		return "", fmt.Errorf("token contains an unexpected character at position %d; save the file as plain text (ASCII or UTF-8)", i)
+	}
+	return s, nil
 }

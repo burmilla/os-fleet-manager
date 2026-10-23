@@ -228,7 +228,7 @@ included.
 docker run -d --name fleet-manager -p 8080:8080 -v fleet-data:/data \
   -e FLEET_GIT_URL=https://github.com/example/fleet-config.git \
   -e FLEET_GIT_TOKEN=github_pat_... \
-  burmilla/os-fleet-manager:v1.1.2
+  burmilla/os-fleet-manager:v1.1.3
 ```
 
 For Docker Swarm see [deploy/docker-stack.yml](deploy/docker-stack.yml). It runs
@@ -279,7 +279,7 @@ Tokens:
 
 The token is passed to git through the environment by a credential helper and
 is never written to disk. A token file may end with a newline and may come
-from Windows (byte order mark, CRLF). A rejected token shows up as
+from Windows (UTF-16, byte order mark, CRLF). A rejected token shows up as
 `Authentication failed` in the log; check the scope and expiry of the token. If a sync or the new configuration is invalid, the last
 good configuration stays active and `burmilla_fleet_config_sync_success` drops
 to 0.
