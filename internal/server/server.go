@@ -1,4 +1,4 @@
-// Package server implements the Fleet Manager HTTP API.
+// Package server implements the BurFleet HTTP API.
 package server
 
 import (

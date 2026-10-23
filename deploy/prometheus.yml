@@ -4,7 +4,7 @@ scrape_configs:
     # With FLEET_TLS_CERT / FLEET_TLS_KEY set (see docker-stack.yml):
     scheme: https
     tls_config:
-      ca_file: /etc/prometheus/fleet-ca.crt   # CA of the Fleet Manager certificate
+      ca_file: /etc/prometheus/fleet-ca.crt   # CA of the BurFleet certificate
       server_name: fleet.example.com          # name in the certificate
     static_configs:
       - targets: ['fleet-manager:8080']

@@ -53,7 +53,7 @@ func writeAuthError(w http.ResponseWriter, err error) {
 		ae = &authError{http.StatusUnauthorized, err.Error()}
 	}
 	if ae.code == http.StatusUnauthorized {
-		w.Header().Set("WWW-Authenticate", `Basic realm="BurmillaOS Fleet Manager"`)
+		w.Header().Set("WWW-Authenticate", `Basic realm="BurFleet"`)
 	}
 	http.Error(w, ae.msg, ae.code)
 }

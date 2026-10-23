@@ -1,6 +1,6 @@
-# os-fleet-manager
+# BurFleet
 
-Singleton Fleet Manager service to control large amounts of BurmillaOS installations.
+BurFleet is a singleton service to control large amounts of BurmillaOS installations.
 
 It is the successor of the RancherOS `os-subscriber` idea, built for servers
 which are part of a Docker Swarm:
@@ -17,14 +17,14 @@ which are part of a Docker Swarm:
   once the server is back and the Swarm is healthy again, so a rollout never
   takes down more nodes than you allow and stops on the first broken node.
 * Optional htpasswd-style **authentication per Swarm + Environment**.
-* Servers report back their state; Fleet Manager publishes it as
+* Servers report back their state; BurFleet publishes it as
   **Prometheus metrics**, with example **Grafana dashboards**.
 
 The client side is the optional `fleet-client` system service in
 [os-services](https://github.com/burmilla/os-services) (`images/20-fleetclient`).
 
 ```
- private Git repo ──(git fetch every minute)──► Fleet Manager ◄── Prometheus ◄── Grafana
+ private Git repo ──(git fetch every minute)──► BurFleet ◄── Prometheus ◄── Grafana
    fleet.yml                                     ▲      │
                                      report/lock │      │ target versions, window, restart
                                                  │      ▼
@@ -98,7 +98,7 @@ swarms/swarm-a/production.yml      one environment (e.g. production ops)
   team cannot override what another team's file defines. Because membership
   comes from the clients, a team's file only affects servers which call that
   team's Swarm + Environment; it cannot pull in or change servers of others.
-* If any file is invalid, Fleet Manager keeps serving the previous
+* If any file is invalid, BurFleet keeps serving the previous
   configuration (`burmilla_fleet_config_sync_success` is 0). Run
   `fleet-manager validate fleet.yml` in CI of the configuration repository
   so broken changes are caught before merge.
@@ -181,7 +181,7 @@ swarms:
   and `/metrics`, stay open.
 
 Basic authentication sends the password with every request, so use TLS:
-set `FLEET_TLS_CERT` / `FLEET_TLS_KEY` or put Fleet Manager behind a TLS
+set `FLEET_TLS_CERT` / `FLEET_TLS_KEY` or put BurFleet behind a TLS
 reverse proxy.
 
 What it protects and what not:
@@ -194,9 +194,9 @@ What it protects and what not:
   on each of them (`rancher.environment.FLEET_PASSWORD`). Whoever has root on
   one of them can act as any server of that environment: send false reports
   or take its maintenance locks. It cannot reach other environments.
-* It authenticates servers towards Fleet Manager, not Fleet Manager towards
+* It authenticates servers towards BurFleet, not BurFleet towards
   servers: use HTTPS (and `FLEET_CA_CERT` for a private CA) so clients only
-  take configuration from the real Fleet Manager.
+  take configuration from the real BurFleet.
 * Configuration itself is not secret (`/api/v1/servers` stays open); do not
   put secrets into `fleet.yml`.
 
@@ -232,7 +232,7 @@ docker run -d --name fleet-manager -p 8080:8080 -v fleet-data:/data \
 ```
 
 For Docker Swarm see [deploy/docker-stack.yml](deploy/docker-stack.yml). It runs
-Fleet Manager hardened: as an unprivileged user without Linux capabilities, on a
+BurFleet hardened: as an unprivileged user without Linux capabilities, on a
 read-only root filesystem with only `/data` and a small `/tmp` writable, with
 HTTPS, secrets readable by the service user only, and memory/CPU limits.
 Run a **single replica** with a persistent `/data` volume: the last reports
