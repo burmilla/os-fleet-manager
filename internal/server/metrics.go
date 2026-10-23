@@ -71,6 +71,7 @@ func (s *Server) handleMetrics(w http.ResponseWriter, r *http.Request) {
 		lockHeld = &metric{name: "burmilla_fleet_server_maintenance_lock_held", help: "Whether a server holds a maintenance lock.", typ: "gauge"}
 		locks    = &metric{name: "burmilla_fleet_maintenance_locks", help: "Maintenance locks held per Swarm and Environment.", typ: "gauge"}
 		swHealth = &metric{name: "burmilla_fleet_swarm_healthy", help: "Whether the whole Swarm is healthy (servers in maintenance excluded).", typ: "gauge"}
+		swReason = &metric{name: "burmilla_fleet_swarm_unhealthy_reason", help: "Why a Swarm is not healthy, 1 per unhealthy Swarm.", typ: "gauge"}
 		swNodes  = &metric{name: "burmilla_fleet_swarm_nodes", help: "Swarm nodes as seen by the freshest manager report.", typ: "gauge"}
 		swMgrs   = &metric{name: "burmilla_fleet_swarm_managers", help: "Swarm managers as seen by the freshest manager report.", typ: "gauge"}
 		swSvcs   = &metric{name: "burmilla_fleet_swarm_services", help: "Swarm services by readiness as seen by the freshest manager report.", typ: "gauge"}
@@ -156,6 +157,9 @@ func (s *Server) handleMetrics(w http.ResponseWriter, r *http.Request) {
 	for _, h := range s.swarmHealth() {
 		l := [][2]string{{"swarm", h.Swarm}}
 		swHealth.add(l, b2f(h.Healthy))
+		if !h.Healthy {
+			swReason.add(append(l, [2]string{"reason", h.Message}), 1)
+		}
 		if h.Status != nil {
 			swNodes.add(append(l, [2]string{"state", "ready"}), float64(h.Status.NodesReady))
 			swNodes.add(append(l, [2]string{"state", "down"}), float64(h.Status.Nodes-h.Status.NodesReady))
@@ -172,7 +176,7 @@ func (s *Server) handleMetrics(w http.ResponseWriter, r *http.Request) {
 	}
 
 	w.Header().Set("Content-Type", "text/plain; version=0.0.4; charset=utf-8")
-	for _, m := range []*metric{syncTime, syncOK, syncFail, revision, info, desired, lastSeen, upToDate, window, state, boot, restart, pending, ctrs, ctrBad, sshSync, sshPass, sshOff, lockHeld, locks, swHealth, swNodes, swMgrs, swSvcs, svcRun, svcWant} {
+	for _, m := range []*metric{syncTime, syncOK, syncFail, revision, info, desired, lastSeen, upToDate, window, state, boot, restart, pending, ctrs, ctrBad, sshSync, sshPass, sshOff, lockHeld, locks, swHealth, swReason, swNodes, swMgrs, swSvcs, svcRun, svcWant} {
 		m.write(w)
 	}
 }
