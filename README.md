@@ -107,6 +107,17 @@ See [examples/fleet-config](examples/fleet-config) for a split configuration
 with [CODEOWNERS](examples/fleet-config/CODEOWNERS) and a
 [validation workflow](examples/fleet-config/.github/workflows/validate.yml).
 
+### Existing installations: visibility first
+
+fleet-client also runs on older BurmillaOS and RancherOS 1.x installations
+(see its [README](https://github.com/burmilla/os-services/blob/v3.0.x/images/20-fleetclient/README.md)).
+To see the state of a fleet before planning upgrades, start with a
+report-only configuration like
+[examples/visibility/fleet.yml](examples/visibility/fleet.yml):
+`upgrade_policy: none` and no `ssh`, `max_uptime` or `restart_after`, so
+clients only report. The target versions show who is behind in the metrics
+and dashboards.
+
 ### SSH access
 
 fleet-client applies `ssh` settings on every check-in, without a maintenance

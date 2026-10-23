@@ -17,6 +17,7 @@ jobs:
         go vet ./...
         go test ./...
         go run . validate examples/fleet-config/fleet.yml
+        go run . validate examples/visibility/fleet.yml
 
     - name: Build image
       run: docker build -t burmilla/os-fleet-manager:pr .
