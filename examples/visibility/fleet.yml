@@ -1,0 +1,26 @@
+# Report-only configuration: get visibility of existing BurmillaOS and
+# RancherOS installations before planning upgrades. fleet-client only
+# reports; it does not upgrade, restart or change SSH settings.
+#
+# The targets below are only used to show which servers are behind
+# (burmilla_fleet_server_up_to_date and maintenance_required in the
+# dashboards).
+
+defaults:
+  upgrade_policy: none             # report only, never upgrade or restart
+  os_version: v3.0.0               # target to compare against
+  docker_version: docker-29.9.2
+  check_interval: 5m
+  # No max_uptime, restart_after or ssh here: ssh settings are applied
+  # in every upgrade_policy, so leave them out until you want them.
+
+# Swarms only need to be listed when they get their own settings or
+# htpasswd. Servers join one by calling its path (FLEET_SWARM and
+# FLEET_ENVIRONMENT on the client); servers without them report as
+# servers outside of Swarms.
+swarms:
+  swarm-a:
+    environments:
+      production: {}
+      test:
+        os_version: v3.0.1         # e.g. a newer target for test
