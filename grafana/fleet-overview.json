@@ -2,7 +2,7 @@
   "__inputs": [],
   "uid": "burmilla-fleet-overview",
   "title": "BurmillaOS Fleet overview",
-  "description": "Fleet Manager view of BurmillaOS servers: versions, compliance, maintenance locks and Swarm health.",
+  "description": "BurFleet view of BurmillaOS servers: versions, compliance, maintenance locks and Swarm health.",
   "tags": [
     "burmilla",
     "fleet"

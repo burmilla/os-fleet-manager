@@ -1,4 +1,4 @@
-# Fleet Manager API (v1)
+# BurFleet API (v1)
 
 The API is plain HTTP(S) + JSON.
 
@@ -233,7 +233,7 @@ Swarm through the health check.
 Releases the lock held by the host (manual override). `204`.
 
 Locks are stored in `$FLEET_DATA_DIR/locks.json` and survive a restart of
-Fleet Manager. A lock is granted only after it has been written to disk.
+BurFleet. A lock is granted only after it has been written to disk.
 
 ## `GET /api/v1/servers`
 

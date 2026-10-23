@@ -1,4 +1,4 @@
-# Deploy Fleet Manager to Docker Swarm:
+# Deploy BurFleet to Docker Swarm:
 #   printf '%s' "$PAT" | docker secret create fleet_git_token -
 #   docker secret create fleet_tls_cert fleet.example.com.crt
 #   docker secret create fleet_tls_key fleet.example.com.key
@@ -21,7 +21,7 @@ services:
       FLEET_GIT_BRANCH: main
       # FLEET_GIT_PATH: ops/fleet  # when the configuration is a directory of a shared repository
       FLEET_GIT_TOKEN_FILE: /run/secrets/fleet_git_token
-      # Clients send htpasswd passwords, so serve HTTPS (or put Fleet Manager
+      # Clients send htpasswd passwords, so serve HTTPS (or put BurFleet
       # behind a TLS reverse proxy and drop these and the secrets).
       FLEET_TLS_CERT: /run/secrets/fleet_tls_cert
       FLEET_TLS_KEY: /run/secrets/fleet_tls_key

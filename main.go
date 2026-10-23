@@ -1,4 +1,4 @@
-// Fleet Manager serves target BurmillaOS and User Docker versions and
+// BurFleet serves target BurmillaOS and User Docker versions and
 // maintenance windows to fleet-client services, based on configuration
 // stored in a Git repository.
 package main
@@ -114,7 +114,7 @@ func main() {
 		_ = httpSrv.Shutdown(shutdown)
 	}()
 	cert, key := os.Getenv("FLEET_TLS_CERT"), os.Getenv("FLEET_TLS_KEY")
-	log.Printf("BurmillaOS Fleet Manager %s listening on %s (TLS %t)", Version, listen, cert != "")
+	log.Printf("BurFleet %s listening on %s (TLS %t)", Version, listen, cert != "")
 	var err error
 	if cert != "" {
 		err = httpSrv.ListenAndServeTLS(cert, key)
