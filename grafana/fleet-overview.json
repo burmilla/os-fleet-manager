@@ -448,9 +448,19 @@
           "refId": "E",
           "format": "table",
           "instant": true
+        },
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${datasource}"
+          },
+          "expr": "burmilla_fleet_swarm_unhealthy_reason{swarm=~\"$swarm\"}",
+          "refId": "F",
+          "format": "table",
+          "instant": true
         }
       ],
-      "description": "Healthy = every server outside of maintenance reports fresh and active, and the freshest manager sees all other nodes ready. Details: GET /api/v1/swarms.",
+      "description": "Healthy = every server outside of maintenance reports fresh and active, and the freshest manager sees all other nodes ready. Problem tells the first check which failed. Details: GET /api/v1/swarms.",
       "options": {
         "showHeader": true
       },
@@ -509,14 +519,16 @@
               "__name__": true,
               "state": true,
               "job": true,
-              "instance": true
+              "instance": true,
+              "Value #F": true
             },
             "renameByName": {
               "Value #A": "Healthy",
               "Value #B": "Nodes ready",
               "Value #C": "Nodes down",
               "Value #D": "Managers unreachable",
-              "Value #E": "Services not ready"
+              "Value #E": "Services not ready",
+              "reason": "Problem"
             }
           }
         }

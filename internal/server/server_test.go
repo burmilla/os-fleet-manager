@@ -200,6 +200,7 @@ func TestMaintenanceLockFollowsSwarmHealth(t *testing.T) {
 		`burmilla_fleet_server_up_to_date{hostname="w1",swarm="s1",environment="prod"} 0`,
 		`burmilla_fleet_server_maintenance_required{hostname="w1",swarm="s1",environment="prod",reason="os_upgrade"} 1`,
 		`burmilla_fleet_swarm_healthy{swarm="s1"} 0`,
+		`burmilla_fleet_swarm_unhealthy_reason{swarm="s1",reason="`,
 		`burmilla_fleet_swarm_nodes{swarm="s1",state="ready"} 4`,
 		`burmilla_fleet_swarm_services{swarm="s1",state="ready"} 5`,
 		`burmilla_fleet_config_info{revision="abc"} 1`,

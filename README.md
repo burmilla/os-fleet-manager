@@ -228,7 +228,7 @@ included.
 docker run -d --name fleet-manager -p 8080:8080 -v fleet-data:/data \
   -e FLEET_GIT_URL=https://github.com/example/fleet-config.git \
   -e FLEET_GIT_TOKEN=github_pat_... \
-  burmilla/os-fleet-manager:v1.1.2
+  burmilla/os-fleet-manager:v1.1.3
 ```
 
 For Docker Swarm see [deploy/docker-stack.yml](deploy/docker-stack.yml). It runs
@@ -325,6 +325,7 @@ standalone group, and `/api/v1` for servers outside of them.
 | `burmilla_fleet_server_ssh_disabled` | hostname, swarm, environment (sshd disabled by `disable_after_boot`) |
 | `burmilla_fleet_maintenance_locks` | swarm, environment |
 | `burmilla_fleet_swarm_healthy` | swarm |
+| `burmilla_fleet_swarm_unhealthy_reason` | swarm, reason (first problem found, only for unhealthy Swarms) |
 | `burmilla_fleet_swarm_nodes` / `burmilla_fleet_swarm_managers` / `burmilla_fleet_swarm_services` | swarm, state |
 | `burmilla_fleet_swarm_service_running_tasks` / `burmilla_fleet_swarm_service_desired_tasks` | swarm, service, mode, update_state (services which are not ready) |
 | `burmilla_fleet_config_info` | revision |
