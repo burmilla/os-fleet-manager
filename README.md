@@ -54,6 +54,7 @@ inherited `defaults` < `swarms.<swarm>` < `swarms.<swarm>.environments.<env>`
 | `ssh.authorized_keys`        | SSH public keys of the `rancher` and `docker` users managed by fleet-client. The list of the most specific level wins. `[]` removes all managed keys, unset = not managed |
 | `ssh.password_authentication`| `true` / `false` enables or disables password logins in sshd. Unset = not managed |
 | `ssh.disable_after_boot`     | Hardening: stop sshd once the server has been up this long (e.g. `10m`) and no SSH session is active. `0` = enable sshd, unset = not managed |
+| `console_access`             | `false` disables interactive access to the console, sshd and the tty logins, also across reboots (`ros console access disable`); `true` enables it again. The console container keeps running for User Docker. Unset = not managed |
 
 A server's Swarm and Environment come only from the client: fleet-client
 calls `/api/v1/swarms/<FLEET_SWARM>/<FLEET_ENVIRONMENT>/...`. The
@@ -145,6 +146,36 @@ lock, because they do not interrupt running workloads:
 
 Make sure servers have working keys before disabling passwords. The applied
 state is reported back and exposed as `burmilla_fleet_server_ssh_in_sync`.
+
+### Console access
+
+Servers which are managed only through BurFleet, the Docker API or a GitOps
+agent do not need logins at all. `console_access: false` runs
+`ros console access disable` on the server, which stops sshd and the logins
+on the ttys (including autologin) and sets `rancher.console_access: false`,
+so they stay off across reboots. `true` runs `ros console access enable`.
+Both are applied right away, without a maintenance lock. The console
+container itself keeps running, because User Docker runs inside it and
+uses its tools: Docker volumes on iSCSI or NFS keep working. Established
+SSH sessions are kept, tty sessions are hung up.
+
+While access is disabled the `ssh` settings are still written, so they are
+in place when access is enabled again, but `ssh.disable_after_boot` does
+not apply. The state is reported back as `burmilla_fleet_server_console_access`
+and compared with the configuration in
+`burmilla_fleet_server_console_access_in_sync`. Needs a BurmillaOS version
+with `ros console access` (v3.0.0-rc1 or later); older versions report an
+error when it is set.
+
+```yaml
+defaults:
+  console_access: false            # no logins by default
+swarms:
+  swarm-a:
+    environments:
+      test:
+        console_access: true       # developers log in to test servers
+```
 
 ```yaml
 defaults:
@@ -366,6 +397,8 @@ standalone group, and `/api/v1` for servers outside of them.
 | `burmilla_fleet_server_ssh_in_sync` | hostname, swarm, environment (managed SSH keys and password setting applied) |
 | `burmilla_fleet_server_ssh_password_authentication` | hostname, swarm, environment (sshd accepts passwords) |
 | `burmilla_fleet_server_ssh_disabled` | hostname, swarm, environment (sshd disabled by `disable_after_boot`) |
+| `burmilla_fleet_server_console_access` | hostname, swarm, environment (sshd and tty logins of the console enabled) |
+| `burmilla_fleet_server_console_access_in_sync` | hostname, swarm, environment (`console_access` applied, 1 when not managed) |
 | `burmilla_fleet_server_nomad_node` | hostname, swarm, environment, status, eligibility, drain (Nomad QEMU nodes) |
 | `burmilla_fleet_server_nomad_allocations` | hostname, swarm, environment (running Nomad allocations, Nomad QEMU nodes) |
 | `burmilla_fleet_maintenance_locks` | swarm, environment |

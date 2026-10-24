@@ -444,6 +444,52 @@ func TestSSHStatus(t *testing.T) {
 	}
 }
 
+func TestConsoleAccess(t *testing.T) {
+	e := newEnv(t)
+	e.api = "/api/v1"
+	cfg, err := fleet.Parse([]byte("defaults: {console_access: false}"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	e.s.SetConfig(cfg)
+
+	var d fleet.Desired
+	_ = json.Unmarshal(e.get("/api/v1/config?hostname=solo"), &d)
+	if d.ConsoleAccess == nil || *d.ConsoleAccess || !d.ConsoleAccessInSync {
+		t.Fatalf("unexpected console access config: %+v", d)
+	}
+
+	// Old client which does not report console access.
+	_, body := e.post("/api/v1/report", Report{Hostname: "solo"})
+	_ = json.Unmarshal(body, &d)
+	if d.ConsoleAccessInSync {
+		t.Fatal("not reported, cannot be in sync")
+	}
+	metrics := string(e.get("/metrics"))
+	if want := `burmilla_fleet_server_console_access_in_sync{hostname="solo",swarm="",environment=""} 0`; !strings.Contains(metrics, want) {
+		t.Fatalf("missing %s in\n%s", want, metrics)
+	}
+	if strings.Contains(metrics, "burmilla_fleet_server_console_access{") {
+		t.Fatal("console access must not be exported when not reported")
+	}
+
+	off := false
+	_, body = e.post("/api/v1/report", Report{Hostname: "solo", ConsoleAccess: &off})
+	_ = json.Unmarshal(body, &d)
+	if !d.ConsoleAccessInSync {
+		t.Fatalf("should be in sync: %s", body)
+	}
+	metrics = string(e.get("/metrics"))
+	for _, want := range []string{
+		`burmilla_fleet_server_console_access{hostname="solo",swarm="",environment=""} 0`,
+		`burmilla_fleet_server_console_access_in_sync{hostname="solo",swarm="",environment=""} 1`,
+	} {
+		if !strings.Contains(metrics, want) {
+			t.Fatalf("missing %s in\n%s", want, metrics)
+		}
+	}
+}
+
 func TestLocalContainers(t *testing.T) {
 	e := newEnv(t)
 	e.api = "/api/v1"

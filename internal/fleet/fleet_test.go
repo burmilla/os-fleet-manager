@@ -195,6 +195,50 @@ func TestSSHSettings(t *testing.T) {
 	}
 }
 
+func TestConsoleAccess(t *testing.T) {
+	cfg, err := Load("../../examples/fleet-config/fleet.yml")
+	if err != nil {
+		t.Fatal(err)
+	}
+	now := time.Now()
+
+	prod := cfg.Resolve("swarm-a-mgr-01", "swarm-a", "production", now)
+	if prod.ConsoleAccess == nil || *prod.ConsoleAccess {
+		t.Fatalf("production should inherit console_access: false: %+v", prod.ConsoleAccess)
+	}
+	test := cfg.Resolve("worker-17", "swarm-a", "test", now)
+	if test.ConsoleAccess == nil || !*test.ConsoleAccess {
+		t.Fatalf("test should enable console access: %+v", test.ConsoleAccess)
+	}
+
+	on, off := true, false
+	prod.CheckConsoleAccess(&off)
+	if !prod.ConsoleAccessInSync {
+		t.Fatal("disabled as configured")
+	}
+	prod.CheckConsoleAccess(&on)
+	if prod.ConsoleAccessInSync {
+		t.Fatal("still enabled")
+	}
+	prod.CheckConsoleAccess(nil)
+	if prod.ConsoleAccessInSync {
+		t.Fatal("client did not report console access")
+	}
+
+	cfg, err = Parse([]byte("defaults: {}"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	d := cfg.Resolve("x", "", "", now)
+	if d.ConsoleAccess != nil || !d.ConsoleAccessInSync {
+		t.Fatalf("not managed by default: %+v", d)
+	}
+	d.CheckConsoleAccess(nil)
+	if !d.ConsoleAccessInSync {
+		t.Fatal("unmanaged is always in sync")
+	}
+}
+
 func TestInvalidSSHKey(t *testing.T) {
 	for _, c := range []string{
 		"defaults: {ssh: {authorized_keys: [not-a-key]}}",

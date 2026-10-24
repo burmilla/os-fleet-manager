@@ -101,6 +101,7 @@ func (s *Server) desired(cfg *fleet.Config, hostname, swarm, environment string,
 	if ok {
 		d.Evaluate(rec.Report.OSVersion, rec.Report.DockerVersion, rec.Report.BootTime, now)
 		d.CheckSSH(rec.Report.SSH)
+		d.CheckConsoleAccess(rec.Report.ConsoleAccess)
 	}
 	return d
 }

@@ -90,6 +90,9 @@ type Report struct {
 	// SSH is the applied state: the keys managed by fleet-client and
 	// whether sshd accepts passwords.
 	SSH *fleet.SSH `json:"ssh,omitempty"`
+	// ConsoleAccess is whether sshd and the tty logins of the console are
+	// enabled; omitted by BurmillaOS versions without ros console access.
+	ConsoleAccess *bool `json:"console_access,omitempty"`
 	// Nomad is omitted when the client could not read it, and by
 	// BurmillaOS servers.
 	Nomad *NomadStatus `json:"nomad,omitempty"`
