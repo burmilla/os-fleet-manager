@@ -205,7 +205,7 @@ What it protects and what not:
 
 ### Nomad QEMU nodes
 
-[Nomad QEMU nodes](https://github.com/olljanat/nomad-qemu-node) (Ubuntu based
+Since v1.2.0, [Nomad QEMU nodes](https://github.com/olljanat/nomad-qemu-node) (Ubuntu based
 elemental A/B images running QEMU VMs under HashiCorp Nomad) report with
 `node_type: nomad-qemu-node`, their OS image tag as `os_version` and their
 QEMU and Nomad versions. Their
@@ -271,7 +271,7 @@ included.
 docker run -d --name fleet-manager -p 8080:8080 -v fleet-data:/data \
   -e FLEET_GIT_URL=https://github.com/example/fleet-config.git \
   -e FLEET_GIT_TOKEN=github_pat_... \
-  burmilla/os-fleet-manager:v1.1.3
+  burmilla/os-fleet-manager:v1.2.0
 ```
 
 For Docker Swarm see [deploy/docker-stack.yml](deploy/docker-stack.yml). It runs
