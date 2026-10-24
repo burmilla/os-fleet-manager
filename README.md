@@ -389,6 +389,8 @@ Per-server metrics of servers which report a node type (Nomad QEMU nodes)
 also have a `node_type` label.
 
 Scrape config example: [deploy/prometheus.yml](deploy/prometheus.yml).
+Example alerting rules (servers not reporting, degraded, failed or inactive
+software RAID arrays, stuck RAID recovery): [deploy/alerts.yml](deploy/alerts.yml).
 Grafana dashboards to import: [grafana/fleet-overview.json](grafana/fleet-overview.json)
 (BurmillaOS fleet), [grafana/fleet-server.json](grafana/fleet-server.json) (one server)
 and [grafana/nomad-qemu-nodes.json](grafana/nomad-qemu-nodes.json) (Nomad QEMU nodes).
