@@ -240,6 +240,9 @@ swarms:
   and not draining, so the VMs have somewhere to go.
 * The lock is released once the node runs the target version and its Nomad
   node is ready and eligible again.
+* Since v1.3.0 they report the status of their software RAID arrays
+  (`/proc/mdstat`): degraded arrays, failed and spare devices and the
+  progress of a rebuild show on the dashboard.
 * Grafana dashboard: [grafana/nomad-qemu-nodes.json](grafana/nomad-qemu-nodes.json).
   The BurmillaOS fleet overview leaves these nodes out.
 
@@ -273,7 +276,7 @@ included.
 docker run -d --name fleet-manager -p 8080:8080 -v fleet-data:/data \
   -e FLEET_GIT_URL=https://github.com/example/fleet-config.git \
   -e FLEET_GIT_TOKEN=github_pat_... \
-  burmilla/os-fleet-manager:v1.2.1
+  burmilla/os-fleet-manager:v1.3.0
 ```
 
 For Docker Swarm see [deploy/docker-stack.yml](deploy/docker-stack.yml). It runs
@@ -370,6 +373,10 @@ standalone group, and `/api/v1` for servers outside of them.
 | `burmilla_fleet_server_ssh_disabled` | hostname, swarm, environment (sshd disabled by `disable_after_boot`) |
 | `burmilla_fleet_server_nomad_node` | hostname, swarm, environment, status, eligibility, drain (Nomad QEMU nodes) |
 | `burmilla_fleet_server_nomad_allocations` | hostname, swarm, environment (running Nomad allocations, Nomad QEMU nodes) |
+| `burmilla_fleet_server_raid_array` | hostname, swarm, environment, array, level, state (software RAID arrays) |
+| `burmilla_fleet_server_raid_degraded` | hostname, swarm, environment, array (active array misses devices) |
+| `burmilla_fleet_server_raid_devices` | hostname, swarm, environment, array, state (active / missing / failed / spare) |
+| `burmilla_fleet_server_raid_sync_progress_percent` | hostname, swarm, environment, array, action (while a recovery, resync, check, repair or reshape runs) |
 | `burmilla_fleet_maintenance_locks` | swarm, environment |
 | `burmilla_fleet_swarm_healthy` | swarm |
 | `burmilla_fleet_swarm_unhealthy_reason` | swarm, reason (first problem found, only for unhealthy Swarms) |
@@ -382,6 +389,8 @@ Per-server metrics of servers which report a node type (Nomad QEMU nodes)
 also have a `node_type` label.
 
 Scrape config example: [deploy/prometheus.yml](deploy/prometheus.yml).
+Example alerting rules (servers not reporting, degraded, failed or inactive
+software RAID arrays, stuck RAID recovery): [deploy/alerts.yml](deploy/alerts.yml).
 Grafana dashboards to import: [grafana/fleet-overview.json](grafana/fleet-overview.json)
 (BurmillaOS fleet), [grafana/fleet-server.json](grafana/fleet-server.json) (one server)
 and [grafana/nomad-qemu-nodes.json](grafana/nomad-qemu-nodes.json) (Nomad QEMU nodes).

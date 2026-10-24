@@ -81,6 +81,10 @@ func (s *Server) handleMetrics(w http.ResponseWriter, r *http.Request) {
 		svcWant  = &metric{name: "burmilla_fleet_swarm_service_desired_tasks", help: "Desired tasks of Swarm services which are not ready.", typ: "gauge"}
 		nomad    = &metric{name: "burmilla_fleet_server_nomad_node", help: "Nomad node status of a Nomad QEMU node.", typ: "gauge"}
 		allocs   = &metric{name: "burmilla_fleet_server_nomad_allocations", help: "Running Nomad allocations on a Nomad QEMU node.", typ: "gauge"}
+		raid     = &metric{name: "burmilla_fleet_server_raid_array", help: "Software RAID array of a server.", typ: "gauge"}
+		raidDeg  = &metric{name: "burmilla_fleet_server_raid_degraded", help: "Whether a software RAID array of a server misses devices.", typ: "gauge"}
+		raidDevs = &metric{name: "burmilla_fleet_server_raid_devices", help: "Member devices of a software RAID array by state.", typ: "gauge"}
+		raidSync = &metric{name: "burmilla_fleet_server_raid_sync_progress_percent", help: "Progress of a running software RAID rebuild, resync or check.", typ: "gauge"}
 	)
 
 	s.syncMu.Lock()
@@ -141,6 +145,25 @@ func (s *Server) handleMetrics(w http.ResponseWriter, r *http.Request) {
 			), 1)
 			allocs.add(base, float64(n.Allocations))
 		}
+		for _, a := range rep.RAID {
+			array := [2]string{"array", a.Name}
+			raid.add(with(array, [2]string{"level", a.Level}, [2]string{"state", a.State}), 1)
+			raidDeg.add(with(array), b2f(a.Degraded))
+			for _, d := range []struct {
+				state string
+				n     int
+			}{
+				{"active", a.ActiveDevices},
+				{"missing", max(a.Devices-a.ActiveDevices, 0)},
+				{"failed", len(a.FailedDevices)},
+				{"spare", len(a.SpareDevices)},
+			} {
+				raidDevs.add(with(array, [2]string{"state", d.state}), float64(d.n))
+			}
+			if a.SyncAction != "" {
+				raidSync.add(with(array, [2]string{"action", a.SyncAction}), a.SyncProgress)
+			}
+		}
 		lastSeen.add(base, float64(st.LastSeen.Unix()))
 		upToDate.add(base, b2f(st.UpToDate))
 		restart.add(base, b2f(d.RestartRequired))
@@ -195,7 +218,7 @@ func (s *Server) handleMetrics(w http.ResponseWriter, r *http.Request) {
 	}
 
 	w.Header().Set("Content-Type", "text/plain; version=0.0.4; charset=utf-8")
-	for _, m := range []*metric{syncTime, syncOK, syncFail, revision, info, desired, lastSeen, upToDate, window, state, boot, restart, pending, ctrs, ctrBad, sshSync, sshPass, sshOff, lockHeld, locks, swHealth, swReason, swNodes, swMgrs, swSvcs, svcRun, svcWant, nomad, allocs} {
+	for _, m := range []*metric{syncTime, syncOK, syncFail, revision, info, desired, lastSeen, upToDate, window, state, boot, restart, pending, ctrs, ctrBad, sshSync, sshPass, sshOff, lockHeld, locks, swHealth, swReason, swNodes, swMgrs, swSvcs, svcRun, svcWant, nomad, allocs, raid, raidDeg, raidDevs, raidSync} {
 		m.write(w)
 	}
 }

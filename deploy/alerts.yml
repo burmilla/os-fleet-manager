@@ -1,0 +1,56 @@
+# Example Prometheus alerting rules for BurFleet metrics. Load them with
+# rule_files in prometheus.yml and route the alerts with Alertmanager.
+# Reports arrive every check interval (5 minutes by default), so the rules
+# wait for more than one report before firing.
+groups:
+  - name: burmilla-fleet
+    rules:
+      # BurFleet keeps the last report of a server: its other metrics
+      # (e.g. RAID state) stay as they were when it stops reporting.
+      - alert: FleetServerNotReporting
+        expr: |
+          time() - burmilla_fleet_server_last_report_timestamp_seconds > 900
+          and burmilla_fleet_server_last_report_timestamp_seconds > 0
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: "{{ $labels.hostname }} has not reported to BurFleet for 15 minutes"
+
+  - name: burmilla-fleet-raid
+    rules:
+      - alert: SoftwareRAIDDegraded
+        expr: burmilla_fleet_server_raid_degraded == 1
+        for: 10m
+        labels:
+          severity: critical
+        annotations:
+          summary: "RAID array {{ $labels.array }} of {{ $labels.hostname }} is degraded"
+          description: "The array misses devices: one more disk failure can lose data. Replace the failed disk."
+
+      - alert: SoftwareRAIDFailedDevice
+        expr: burmilla_fleet_server_raid_devices{state="failed"} > 0
+        for: 10m
+        labels:
+          severity: critical
+        annotations:
+          summary: "RAID array {{ $labels.array }} of {{ $labels.hostname }} has {{ $value }} failed device(s)"
+
+      - alert: SoftwareRAIDInactive
+        expr: burmilla_fleet_server_raid_array{state!="active"}
+        for: 10m
+        labels:
+          severity: critical
+        annotations:
+          summary: "RAID array {{ $labels.array }} of {{ $labels.hostname }} is {{ $labels.state }}"
+
+      # A rebuild normally finishes within hours; a stuck one shows up here.
+      - alert: SoftwareRAIDRecoveryStuck
+        expr: |
+          burmilla_fleet_server_raid_sync_progress_percent{action="recovery"}
+          and changes(burmilla_fleet_server_raid_sync_progress_percent{action="recovery"}[2h]) == 0
+        for: 1h
+        labels:
+          severity: warning
+        annotations:
+          summary: "RAID recovery of {{ $labels.array }} on {{ $labels.hostname }} has not progressed for 2 hours"

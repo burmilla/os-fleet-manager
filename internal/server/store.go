@@ -66,6 +66,27 @@ type NomadStatus struct {
 	Allocations int `json:"allocations"`
 }
 
+// RAIDArray is a Linux software RAID (md) array of a server, as shown in
+// /proc/mdstat.
+type RAIDArray struct {
+	Name  string `json:"name"`
+	Level string `json:"level"`
+	// State is active or inactive.
+	State    string `json:"state"`
+	ReadOnly bool   `json:"read_only,omitempty"`
+	// Devices is the number of member devices the array should have and
+	// ActiveDevices the number of them which are in sync.
+	Devices       int      `json:"devices"`
+	ActiveDevices int      `json:"active_devices"`
+	Degraded      bool     `json:"degraded"`
+	FailedDevices []string `json:"failed_devices,omitempty"`
+	SpareDevices  []string `json:"spare_devices,omitempty"`
+	// SyncAction is recovery, resync, check, repair or reshape while one is
+	// running or waiting, SyncProgress is in percent.
+	SyncAction   string  `json:"sync_action,omitempty"`
+	SyncProgress float64 `json:"sync_progress,omitempty"`
+}
+
 // Report is the body of POST /api/v1/report.
 type Report struct {
 	Hostname    string `json:"hostname"`
@@ -93,6 +114,8 @@ type Report struct {
 	// Nomad is omitted when the client could not read it, and by
 	// BurmillaOS servers.
 	Nomad *NomadStatus `json:"nomad,omitempty"`
+	// RAID lists the software RAID arrays, omitted when there are none.
+	RAID []RAIDArray `json:"raid,omitempty"`
 }
 
 type record struct {

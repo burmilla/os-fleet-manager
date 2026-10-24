@@ -1372,6 +1372,494 @@
           }
         }
       ]
+    },
+    {
+      "id": 18,
+      "title": "Degraded RAID arrays",
+      "type": "stat",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "${datasource}"
+      },
+      "gridPos": {
+        "x": 0,
+        "y": 53,
+        "w": 12,
+        "h": 4
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${datasource}"
+          },
+          "expr": "count((burmilla_fleet_server_raid_degraded{node_type=\"nomad-qemu-node\",swarm=~\"$group\",environment=~\"$environment\"} == 1) or on (hostname, array) burmilla_fleet_server_raid_array{node_type=\"nomad-qemu-node\",swarm=~\"$group\",environment=~\"$environment\",state!=\"active\"}) or vector(0)",
+          "refId": "A"
+        }
+      ],
+      "description": "Software RAID arrays which miss devices or are not active. The node keeps running, but one more disk failure can lose data: replace the disk.",
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              },
+              {
+                "color": "red",
+                "value": 1
+              }
+            ]
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ]
+        },
+        "colorMode": "background",
+        "graphMode": "none"
+      }
+    },
+    {
+      "id": 19,
+      "title": "RAID syncs running",
+      "type": "stat",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "${datasource}"
+      },
+      "gridPos": {
+        "x": 12,
+        "y": 53,
+        "w": 12,
+        "h": 4
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${datasource}"
+          },
+          "expr": "count(burmilla_fleet_server_raid_sync_progress_percent{node_type=\"nomad-qemu-node\",swarm=~\"$group\",environment=~\"$environment\"}) or vector(0)",
+          "refId": "A"
+        }
+      ],
+      "description": "Software RAID arrays with a running or pending recovery, resync, check or repair. Ubuntu runs a check of every array monthly.",
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              },
+              {
+                "color": "orange",
+                "value": 1
+              }
+            ]
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ]
+        },
+        "colorMode": "background",
+        "graphMode": "none"
+      }
+    },
+    {
+      "id": 20,
+      "title": "Software RAID",
+      "type": "table",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "${datasource}"
+      },
+      "gridPos": {
+        "x": 0,
+        "y": 57,
+        "w": 24,
+        "h": 8
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${datasource}"
+          },
+          "expr": "max by (hostname, array, level, state) (burmilla_fleet_server_raid_array{node_type=\"nomad-qemu-node\",swarm=~\"$group\",environment=~\"$environment\"})",
+          "refId": "A",
+          "format": "table",
+          "instant": true
+        },
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${datasource}"
+          },
+          "expr": "max by (hostname, array) (burmilla_fleet_server_raid_degraded{node_type=\"nomad-qemu-node\",swarm=~\"$group\",environment=~\"$environment\"})",
+          "refId": "B",
+          "format": "table",
+          "instant": true
+        },
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${datasource}"
+          },
+          "expr": "max by (hostname, array) (burmilla_fleet_server_raid_devices{node_type=\"nomad-qemu-node\",swarm=~\"$group\",environment=~\"$environment\",state=\"active\"})",
+          "refId": "C",
+          "format": "table",
+          "instant": true
+        },
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${datasource}"
+          },
+          "expr": "max by (hostname, array) (burmilla_fleet_server_raid_devices{node_type=\"nomad-qemu-node\",swarm=~\"$group\",environment=~\"$environment\",state=\"missing\"})",
+          "refId": "D",
+          "format": "table",
+          "instant": true
+        },
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${datasource}"
+          },
+          "expr": "max by (hostname, array) (burmilla_fleet_server_raid_devices{node_type=\"nomad-qemu-node\",swarm=~\"$group\",environment=~\"$environment\",state=\"failed\"})",
+          "refId": "E",
+          "format": "table",
+          "instant": true
+        },
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${datasource}"
+          },
+          "expr": "max by (hostname, array) (burmilla_fleet_server_raid_devices{node_type=\"nomad-qemu-node\",swarm=~\"$group\",environment=~\"$environment\",state=\"spare\"})",
+          "refId": "F",
+          "format": "table",
+          "instant": true
+        },
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${datasource}"
+          },
+          "expr": "max by (hostname, array, action) (burmilla_fleet_server_raid_sync_progress_percent{node_type=\"nomad-qemu-node\",swarm=~\"$group\",environment=~\"$environment\"})",
+          "refId": "G",
+          "format": "table",
+          "instant": true
+        }
+      ],
+      "description": "Software RAID (md) arrays of the nodes from /proc/mdstat. Missing = devices the array should have but which are not in sync, failed = members marked faulty, sync = running recovery, resync, check or repair.",
+      "options": {
+        "showHeader": true,
+        "sortBy": [
+          {
+            "displayName": "Node",
+            "desc": false
+          }
+        ]
+      },
+      "fieldConfig": {
+        "defaults": {},
+        "overrides": [
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "Degraded"
+            },
+            "properties": [
+              {
+                "id": "mappings",
+                "value": [
+                  {
+                    "type": "value",
+                    "options": {
+                      "0": {
+                        "text": "no",
+                        "color": "green",
+                        "index": 0
+                      },
+                      "1": {
+                        "text": "yes",
+                        "color": "red",
+                        "index": 1
+                      }
+                    }
+                  }
+                ]
+              },
+              {
+                "id": "custom.cellOptions",
+                "value": {
+                  "type": "color-text"
+                }
+              },
+              {
+                "id": "custom.width",
+                "value": 100
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "State"
+            },
+            "properties": [
+              {
+                "id": "mappings",
+                "value": [
+                  {
+                    "type": "value",
+                    "options": {
+                      "inactive": {
+                        "color": "red",
+                        "index": 0
+                      }
+                    }
+                  }
+                ]
+              },
+              {
+                "id": "custom.cellOptions",
+                "value": {
+                  "type": "color-text"
+                }
+              },
+              {
+                "id": "custom.width",
+                "value": 100
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "Missing"
+            },
+            "properties": [
+              {
+                "id": "thresholds",
+                "value": {
+                  "mode": "absolute",
+                  "steps": [
+                    {
+                      "color": "text",
+                      "value": null
+                    },
+                    {
+                      "color": "red",
+                      "value": 1
+                    }
+                  ]
+                }
+              },
+              {
+                "id": "custom.cellOptions",
+                "value": {
+                  "type": "color-text"
+                }
+              },
+              {
+                "id": "custom.width",
+                "value": 100
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "Failed"
+            },
+            "properties": [
+              {
+                "id": "thresholds",
+                "value": {
+                  "mode": "absolute",
+                  "steps": [
+                    {
+                      "color": "text",
+                      "value": null
+                    },
+                    {
+                      "color": "red",
+                      "value": 1
+                    }
+                  ]
+                }
+              },
+              {
+                "id": "custom.cellOptions",
+                "value": {
+                  "type": "color-text"
+                }
+              },
+              {
+                "id": "custom.width",
+                "value": 100
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "Progress"
+            },
+            "properties": [
+              {
+                "id": "unit",
+                "value": "percent"
+              },
+              {
+                "id": "decimals",
+                "value": 1
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "Level"
+            },
+            "properties": [
+              {
+                "id": "custom.width",
+                "value": 100
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "Active"
+            },
+            "properties": [
+              {
+                "id": "custom.width",
+                "value": 100
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "Spare"
+            },
+            "properties": [
+              {
+                "id": "custom.width",
+                "value": 100
+              }
+            ]
+          }
+        ]
+      },
+      "transformations": [
+        {
+          "id": "merge",
+          "options": {}
+        },
+        {
+          "id": "organize",
+          "options": {
+            "excludeByName": {
+              "Time": true,
+              "Value #A": true
+            },
+            "indexByName": {
+              "hostname": 0,
+              "array": 1,
+              "level": 2,
+              "state": 3,
+              "Value #B": 4,
+              "Value #C": 5,
+              "Value #D": 6,
+              "Value #E": 7,
+              "Value #F": 8,
+              "action": 9,
+              "Value #G": 10
+            },
+            "renameByName": {
+              "hostname": "Node",
+              "array": "Array",
+              "level": "Level",
+              "state": "State",
+              "Value #B": "Degraded",
+              "Value #C": "Active",
+              "Value #D": "Missing",
+              "Value #E": "Failed",
+              "Value #F": "Spare",
+              "action": "Sync",
+              "Value #G": "Progress"
+            }
+          }
+        }
+      ]
+    },
+    {
+      "id": 21,
+      "title": "RAID sync progress",
+      "type": "timeseries",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "${datasource}"
+      },
+      "gridPos": {
+        "x": 0,
+        "y": 65,
+        "w": 24,
+        "h": 8
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${datasource}"
+          },
+          "expr": "max by (hostname, array, action) (burmilla_fleet_server_raid_sync_progress_percent{node_type=\"nomad-qemu-node\",swarm=~\"$group\",environment=~\"$environment\"})",
+          "refId": "A",
+          "legendFormat": "{{hostname}} {{array}} {{action}}"
+        }
+      ],
+      "description": "Progress of software RAID recoveries (rebuild onto a new disk), resyncs and checks.",
+      "fieldConfig": {
+        "defaults": {
+          "unit": "percent",
+          "custom": {
+            "fillOpacity": 10,
+            "stacking": {
+              "mode": "none"
+            }
+          },
+          "min": 0,
+          "max": 100
+        },
+        "overrides": []
+      },
+      "options": {
+        "legend": {
+          "displayMode": "list",
+          "placement": "bottom"
+        }
+      }
     }
   ]
 }

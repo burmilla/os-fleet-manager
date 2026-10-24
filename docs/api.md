@@ -196,6 +196,36 @@ maintenance.
 }
 ```
 
+Since v1.3.0 a server can also report its Linux software RAID (md) arrays
+from `/proc/mdstat` (the Nomad QEMU node fleet-client does). `raid` is
+omitted when there are none:
+
+```json
+{
+  "raid": [
+    {
+      "name": "md0",
+      "level": "raid1",
+      "state": "active",
+      "devices": 2,
+      "active_devices": 1,
+      "degraded": true,
+      "failed_devices": ["sdb2"],
+      "spare_devices": ["sdc2"],
+      "sync_action": "recovery",
+      "sync_progress": 12.6
+    }
+  ]
+}
+```
+
+`devices` is the number of members the array should have, `active_devices`
+the members in sync, `degraded` is set when an active array misses members.
+`read_only` is set for read-only arrays. `sync_action` (`recovery`,
+`resync`, `check`, `repair`, `reshape`) and `sync_progress` (percent) are
+only there while one runs or waits. The RAID status does not affect
+maintenance locks.
+
 For them `os_image` / `os_version` of `defaults` are not used (`os_image`
 defaults to `ghcr.io/olljanat/nomad-qemu-node`), `docker_version` is always
 empty and their group counts as `standalone`. `nomad` is omitted when the
