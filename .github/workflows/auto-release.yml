@@ -1,11 +1,11 @@
 name: auto-release
 
 # Tags and releases the version in deploy/docker-stack.yml when it reaches
-# master without a tag yet. Pushes that don't bump the version do nothing.
+# main without a tag yet. Pushes that don't bump the version do nothing.
 on:
   push:
     branches:
-      - master
+      - main
 
 concurrency:
   group: auto-release
