@@ -35,7 +35,7 @@
         "multi": true,
         "allValue": ".*",
         "query": {
-          "query": "label_values(burmilla_fleet_server_desired_info, swarm)",
+          "query": "label_values(burmilla_fleet_server_desired_info{node_type!=\"nomad-qemu-node\"}, swarm)",
           "refId": "v"
         },
         "refresh": 2,
@@ -56,7 +56,7 @@
         "multi": true,
         "allValue": ".*",
         "query": {
-          "query": "label_values(burmilla_fleet_server_desired_info{swarm=~\"$swarm\"}, environment)",
+          "query": "label_values(burmilla_fleet_server_desired_info{swarm=~\"$swarm\",node_type!=\"nomad-qemu-node\"}, environment)",
           "refId": "v"
         },
         "refresh": 2,
@@ -88,7 +88,7 @@
             "type": "prometheus",
             "uid": "${datasource}"
           },
-          "expr": "count(burmilla_fleet_server_desired_info{swarm=~\"$swarm\",environment=~\"$environment\"})",
+          "expr": "count(burmilla_fleet_server_desired_info{swarm=~\"$swarm\",environment=~\"$environment\",node_type!=\"nomad-qemu-node\"})",
           "refId": "A"
         }
       ],
@@ -138,7 +138,7 @@
             "type": "prometheus",
             "uid": "${datasource}"
           },
-          "expr": "sum(burmilla_fleet_server_up_to_date{swarm=~\"$swarm\",environment=~\"$environment\"})",
+          "expr": "sum(burmilla_fleet_server_up_to_date{swarm=~\"$swarm\",environment=~\"$environment\",node_type!=\"nomad-qemu-node\"})",
           "refId": "A"
         }
       ],
@@ -188,7 +188,7 @@
             "type": "prometheus",
             "uid": "${datasource}"
           },
-          "expr": "count(burmilla_fleet_server_up_to_date{swarm=~\"$swarm\",environment=~\"$environment\"} == 0) or vector(0)",
+          "expr": "count(burmilla_fleet_server_up_to_date{swarm=~\"$swarm\",environment=~\"$environment\",node_type!=\"nomad-qemu-node\"} == 0) or vector(0)",
           "refId": "A"
         }
       ],
@@ -242,7 +242,7 @@
             "type": "prometheus",
             "uid": "${datasource}"
           },
-          "expr": "count((time() - burmilla_fleet_server_last_report_timestamp_seconds{swarm=~\"$swarm\",environment=~\"$environment\"}) > 900) or vector(0)",
+          "expr": "count((time() - burmilla_fleet_server_last_report_timestamp_seconds{swarm=~\"$swarm\",environment=~\"$environment\",node_type!=\"nomad-qemu-node\"}) > 900) or vector(0)",
           "refId": "A"
         }
       ],
@@ -296,7 +296,7 @@
             "type": "prometheus",
             "uid": "${datasource}"
           },
-          "expr": "sum(burmilla_fleet_maintenance_locks{swarm=~\"$swarm\",environment=~\"$environment\"}) or vector(0)",
+          "expr": "sum((burmilla_fleet_maintenance_locks{swarm=~\"$swarm\",environment=~\"$environment\"} unless on (swarm) burmilla_fleet_server_desired_info{node_type=\"nomad-qemu-node\"})) or vector(0)",
           "refId": "A"
         }
       ],
@@ -554,7 +554,7 @@
             "type": "prometheus",
             "uid": "${datasource}"
           },
-          "expr": "count by (os_version) (burmilla_fleet_server_info{swarm=~\"$swarm\",environment=~\"$environment\"})",
+          "expr": "count by (os_version) (burmilla_fleet_server_info{swarm=~\"$swarm\",environment=~\"$environment\",node_type!=\"nomad-qemu-node\"})",
           "refId": "A",
           "legendFormat": "{{os_version}}",
           "instant": true
@@ -595,7 +595,7 @@
             "type": "prometheus",
             "uid": "${datasource}"
           },
-          "expr": "count by (docker_version) (burmilla_fleet_server_info{swarm=~\"$swarm\",environment=~\"$environment\"})",
+          "expr": "count by (docker_version) (burmilla_fleet_server_info{swarm=~\"$swarm\",environment=~\"$environment\",node_type!=\"nomad-qemu-node\"})",
           "refId": "A",
           "legendFormat": "{{docker_version}}",
           "instant": true
@@ -636,7 +636,7 @@
             "type": "prometheus",
             "uid": "${datasource}"
           },
-          "expr": "avg by (swarm, environment) (burmilla_fleet_server_up_to_date{swarm=~\"$swarm\",environment=~\"$environment\"})",
+          "expr": "avg by (swarm, environment) (burmilla_fleet_server_up_to_date{swarm=~\"$swarm\",environment=~\"$environment\",node_type!=\"nomad-qemu-node\"})",
           "refId": "A",
           "legendFormat": "{{swarm}} / {{environment}}"
         }
@@ -683,7 +683,7 @@
             "type": "prometheus",
             "uid": "${datasource}"
           },
-          "expr": "sum by (swarm, environment) (burmilla_fleet_maintenance_locks{swarm=~\"$swarm\",environment=~\"$environment\"})",
+          "expr": "sum by (swarm, environment) ((burmilla_fleet_maintenance_locks{swarm=~\"$swarm\",environment=~\"$environment\"} unless on (swarm) burmilla_fleet_server_desired_info{node_type=\"nomad-qemu-node\"}))",
           "refId": "A",
           "legendFormat": "{{swarm}} / {{environment}}"
         }
@@ -728,7 +728,7 @@
             "type": "prometheus",
             "uid": "${datasource}"
           },
-          "expr": "burmilla_fleet_server_info{swarm=~\"$swarm\",environment=~\"$environment\"}",
+          "expr": "burmilla_fleet_server_info{swarm=~\"$swarm\",environment=~\"$environment\",node_type!=\"nomad-qemu-node\"}",
           "refId": "A",
           "format": "table",
           "instant": true
@@ -738,7 +738,7 @@
             "type": "prometheus",
             "uid": "${datasource}"
           },
-          "expr": "burmilla_fleet_server_desired_info{swarm=~\"$swarm\",environment=~\"$environment\"}",
+          "expr": "burmilla_fleet_server_desired_info{swarm=~\"$swarm\",environment=~\"$environment\",node_type!=\"nomad-qemu-node\"}",
           "refId": "B",
           "format": "table",
           "instant": true
@@ -748,7 +748,7 @@
             "type": "prometheus",
             "uid": "${datasource}"
           },
-          "expr": "burmilla_fleet_server_up_to_date{swarm=~\"$swarm\",environment=~\"$environment\"}",
+          "expr": "burmilla_fleet_server_up_to_date{swarm=~\"$swarm\",environment=~\"$environment\",node_type!=\"nomad-qemu-node\"}",
           "refId": "C",
           "format": "table",
           "instant": true
@@ -758,7 +758,7 @@
             "type": "prometheus",
             "uid": "${datasource}"
           },
-          "expr": "time() - burmilla_fleet_server_last_report_timestamp_seconds{swarm=~\"$swarm\",environment=~\"$environment\"}",
+          "expr": "time() - burmilla_fleet_server_last_report_timestamp_seconds{swarm=~\"$swarm\",environment=~\"$environment\",node_type!=\"nomad-qemu-node\"}",
           "refId": "D",
           "format": "table",
           "instant": true
@@ -768,7 +768,7 @@
             "type": "prometheus",
             "uid": "${datasource}"
           },
-          "expr": "time() - burmilla_fleet_server_boot_timestamp_seconds{swarm=~\"$swarm\",environment=~\"$environment\"}",
+          "expr": "time() - burmilla_fleet_server_boot_timestamp_seconds{swarm=~\"$swarm\",environment=~\"$environment\",node_type!=\"nomad-qemu-node\"}",
           "refId": "E",
           "format": "table",
           "instant": true
@@ -931,7 +931,7 @@
             "type": "prometheus",
             "uid": "${datasource}"
           },
-          "expr": "burmilla_fleet_server_maintenance_required{swarm=~\"$swarm\",environment=~\"$environment\"} == 1",
+          "expr": "burmilla_fleet_server_maintenance_required{swarm=~\"$swarm\",environment=~\"$environment\",node_type!=\"nomad-qemu-node\"} == 1",
           "refId": "A",
           "format": "table",
           "instant": true
@@ -980,7 +980,7 @@
             "type": "prometheus",
             "uid": "${datasource}"
           },
-          "expr": "burmilla_fleet_server_state{swarm=~\"$swarm\",environment=~\"$environment\"}",
+          "expr": "burmilla_fleet_server_state{swarm=~\"$swarm\",environment=~\"$environment\",node_type!=\"nomad-qemu-node\"}",
           "refId": "A",
           "format": "table",
           "instant": true
@@ -1108,7 +1108,7 @@
             "type": "prometheus",
             "uid": "${datasource}"
           },
-          "expr": "burmilla_fleet_server_container_not_ready{swarm=~\"$swarm\",environment=~\"$environment\"}",
+          "expr": "burmilla_fleet_server_container_not_ready{swarm=~\"$swarm\",environment=~\"$environment\",node_type!=\"nomad-qemu-node\"}",
           "refId": "A",
           "format": "table",
           "instant": true

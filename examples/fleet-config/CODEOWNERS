@@ -8,3 +8,4 @@
 /swarms/swarm-a/production.yml  @example-org/production-ops
 /swarms/edge.yml                @example-org/edge
 /swarms/edge/                   @example-org/edge
+/swarms/nomad-qemu.yml          @example-org/virtualization

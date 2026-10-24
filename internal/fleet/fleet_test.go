@@ -206,3 +206,35 @@ func TestInvalidSSHKey(t *testing.T) {
 		}
 	}
 }
+
+func TestResolveNomadQEMUNode(t *testing.T) {
+	cfg, err := Parse([]byte(`
+defaults: {os_image: registry.example.com/burmilla/os, os_version: v3.0.0, docker_version: docker-29.9.2, max_uptime: 30d}
+swarms:
+  nomad:
+    os_image: registry.example.com/nomad-qemu-node
+    os_version: v20261024-1
+    environments: {prod: {}}
+servers:
+  solo: {os_version: v20261024-2}
+`))
+	if err != nil {
+		t.Fatal(err)
+	}
+	now := time.Now()
+	d := cfg.ResolveNode("n1", "nomad", "prod", NodeTypeNomadQEMU, now)
+	if d.OSImage != "registry.example.com/nomad-qemu-node" || d.OSVersion != "v20261024-1" || d.DockerVersion != "" ||
+		!d.Standalone || d.MaxUptimeSeconds != 30*24*3600 || d.NodeType != NodeTypeNomadQEMU {
+		t.Fatalf("%+v", d)
+	}
+	d = cfg.ResolveNode("x", "", "", NodeTypeNomadQEMU, now)
+	if d.OSImage != DefaultNomadQEMUImage || d.OSVersion != "" || d.Standalone {
+		t.Fatalf("defaults must not give BurmillaOS versions: %+v", d)
+	}
+	if d = cfg.ResolveNode("solo", "", "", NodeTypeNomadQEMU, now); d.OSVersion != "v20261024-2" {
+		t.Fatalf("server entries apply: %+v", d)
+	}
+	if d = cfg.Resolve("x", "", "", now); d.OSVersion != "v3.0.0" || d.DockerVersion != "docker-29.9.2" {
+		t.Fatalf("BurmillaOS unchanged: %+v", d)
+	}
+}

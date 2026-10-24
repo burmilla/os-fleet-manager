@@ -22,6 +22,9 @@ which are part of a Docker Swarm:
 
 The client side is the optional `fleet-client` system service in
 [os-services](https://github.com/burmilla/os-services) (`images/20-fleetclient`).
+[Nomad QEMU nodes](https://github.com/olljanat/nomad-qemu-node) have their own
+[fleet-client](https://github.com/olljanat/nomad-qemu-node/tree/master/fleet-client),
+see [Nomad QEMU nodes](#nomad-qemu-nodes).
 
 ```
  private Git repo ──(git fetch every minute)──► BurFleet ◄── Prometheus ◄── Grafana
@@ -200,6 +203,46 @@ What it protects and what not:
 * Configuration itself is not secret (`/api/v1/servers` stays open); do not
   put secrets into `fleet.yml`.
 
+### Nomad QEMU nodes
+
+[Nomad QEMU nodes](https://github.com/olljanat/nomad-qemu-node) (Ubuntu based
+elemental A/B images running QEMU VMs under HashiCorp Nomad) report with
+`node_type: nomad-qemu-node`, their OS image tag as `os_version` and their
+QEMU and Nomad versions. Their
+[fleet-client](https://github.com/olljanat/nomad-qemu-node/tree/master/fleet-client)
+drains the node in Nomad, runs `elemental upgrade` to
+`<os_image>:<os_version>` and reboots, while it holds a maintenance lock.
+
+Put them into their own group:
+
+```yaml
+swarms:
+  nomad-qemu:
+    standalone: true                             # no Docker Swarm
+    os_image: ghcr.io/olljanat/nomad-qemu-node   # the default for these nodes
+    os_version: v20261024-1                      # release tag
+    upgrade_policy: auto
+    environments:
+      production: {}
+```
+
+* `os_image` and `os_version` of `defaults` describe BurmillaOS and are not
+  applied to them; `os_image` defaults to `ghcr.io/olljanat/nomad-qemu-node`.
+  `docker_version` and `ssh` do not apply.
+* Mark their group `standalone: true` (a reporting Nomad QEMU node is
+  handled as standalone anyway, but servers listed in the group which have
+  not reported yet would otherwise count as Swarm members). Instead of the
+  Swarm health check, a maintenance lock is only granted while every other
+  Nomad QEMU node of the group (which does not hold a lock) reports, is not
+  in `error` and has a Nomad node which is `ready`, eligible for scheduling
+  and not draining, so the VMs have somewhere to go.
+* The lock is released once the node runs the target version and its Nomad
+  node is ready and eligible again.
+* Grafana dashboard: [grafana/nomad-qemu-nodes.json](grafana/nomad-qemu-nodes.json).
+  The BurmillaOS fleet overview leaves these nodes out.
+
+![Nomad QEMU nodes dashboard](grafana/nomad-qemu-nodes.png)
+
 ### Maintenance lock and Swarm health
 
 Before an upgrade or restart a client asks for a maintenance lock. It is granted
@@ -308,7 +351,7 @@ standalone group, and `/api/v1` for servers outside of them.
 
 | Metric | Labels |
 |--------|--------|
-| `burmilla_fleet_server_info` | hostname, swarm, environment, os_version, docker_version, kernel_version, client_version |
+| `burmilla_fleet_server_info` | hostname, swarm, environment, os_version, docker_version, kernel_version, client_version (Nomad QEMU nodes also qemu_version, nomad_version) |
 | `burmilla_fleet_server_desired_info` | hostname, swarm, environment, os_version, docker_version, upgrade_policy |
 | `burmilla_fleet_server_up_to_date` | hostname, swarm, environment |
 | `burmilla_fleet_server_maintenance_required` | hostname, swarm, environment, reason |
@@ -323,6 +366,8 @@ standalone group, and `/api/v1` for servers outside of them.
 | `burmilla_fleet_server_ssh_in_sync` | hostname, swarm, environment (managed SSH keys and password setting applied) |
 | `burmilla_fleet_server_ssh_password_authentication` | hostname, swarm, environment (sshd accepts passwords) |
 | `burmilla_fleet_server_ssh_disabled` | hostname, swarm, environment (sshd disabled by `disable_after_boot`) |
+| `burmilla_fleet_server_nomad_node` | hostname, swarm, environment, status, eligibility, drain (Nomad QEMU nodes) |
+| `burmilla_fleet_server_nomad_allocations` | hostname, swarm, environment (running Nomad allocations, Nomad QEMU nodes) |
 | `burmilla_fleet_maintenance_locks` | swarm, environment |
 | `burmilla_fleet_swarm_healthy` | swarm |
 | `burmilla_fleet_swarm_unhealthy_reason` | swarm, reason (first problem found, only for unhealthy Swarms) |
@@ -331,9 +376,13 @@ standalone group, and `/api/v1` for servers outside of them.
 | `burmilla_fleet_config_info` | revision |
 | `burmilla_fleet_config_last_sync_timestamp_seconds`, `burmilla_fleet_config_sync_success`, `burmilla_fleet_config_sync_failures_total` | |
 
+Per-server metrics of servers which report a node type (Nomad QEMU nodes)
+also have a `node_type` label.
+
 Scrape config example: [deploy/prometheus.yml](deploy/prometheus.yml).
 Grafana dashboards to import: [grafana/fleet-overview.json](grafana/fleet-overview.json)
-(whole fleet) and [grafana/fleet-server.json](grafana/fleet-server.json) (one server).
+(BurmillaOS fleet), [grafana/fleet-server.json](grafana/fleet-server.json) (one server)
+and [grafana/nomad-qemu-nodes.json](grafana/nomad-qemu-nodes.json) (Nomad QEMU nodes).
 
 ![Fleet overview dashboard](grafana/fleet-overview.png)
 

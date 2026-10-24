@@ -56,14 +56,30 @@ type ContainerState struct {
 	ExitCode      int    `json:"exit_code"`
 }
 
+// NomadStatus is the local Nomad client node of a Nomad QEMU node.
+type NomadStatus struct {
+	NodeID      string `json:"node_id"`
+	Status      string `json:"status"`
+	Eligibility string `json:"eligibility"`
+	Drain       bool   `json:"drain"`
+	// Allocations is the number of running allocations on the node.
+	Allocations int `json:"allocations"`
+}
+
 // Report is the body of POST /api/v1/report.
 type Report struct {
-	Hostname      string       `json:"hostname"`
-	Swarm         string       `json:"swarm"`
-	Environment   string       `json:"environment"`
-	OSVersion     string       `json:"os_version"`
-	DockerVersion string       `json:"docker_version"`
-	KernelVersion string       `json:"kernel_version"`
+	Hostname    string `json:"hostname"`
+	Swarm       string `json:"swarm"`
+	Environment string `json:"environment"`
+	// NodeType is empty for BurmillaOS, fleet.NodeTypeNomadQEMU for Nomad
+	// QEMU nodes.
+	NodeType      string `json:"node_type,omitempty"`
+	OSVersion     string `json:"os_version"`
+	DockerVersion string `json:"docker_version"`
+	KernelVersion string `json:"kernel_version"`
+	// QEMUVersion and NomadVersion are reported by Nomad QEMU nodes.
+	QEMUVersion   string       `json:"qemu_version,omitempty"`
+	NomadVersion  string       `json:"nomad_version,omitempty"`
 	ClientVersion string       `json:"client_version"`
 	BootTime      time.Time    `json:"boot_time"`
 	State         string       `json:"state"`
@@ -74,6 +90,9 @@ type Report struct {
 	// SSH is the applied state: the keys managed by fleet-client and
 	// whether sshd accepts passwords.
 	SSH *fleet.SSH `json:"ssh,omitempty"`
+	// Nomad is omitted when the client could not read it, and by
+	// BurmillaOS servers.
+	Nomad *NomadStatus `json:"nomad,omitempty"`
 }
 
 type record struct {

@@ -532,3 +532,93 @@ swarms:
 		t.Fatal("standalone groups are not Swarms")
 	}
 }
+
+func TestNomadQEMUNodes(t *testing.T) {
+	e := newEnv(t)
+	cfg, err := fleet.Parse([]byte(`
+defaults:
+  os_version: v3.0.0
+  docker_version: docker-29.9.2
+  upgrade_policy: auto
+swarms:
+  nomad:
+    os_version: v20261024-1
+    environments:
+      prod: {max_concurrent_maintenance: 2}
+`))
+	if err != nil {
+		t.Fatal(err)
+	}
+	e.s.SetConfig(cfg)
+	e.api = "/api/v1/swarms/nomad/prod"
+	ready := func() *NomadStatus {
+		return &NomadStatus{NodeID: "id", Status: "ready", Eligibility: "eligible", Allocations: 3}
+	}
+	report := func(host, osVersion string, n *NomadStatus) fleet.Desired {
+		t.Helper()
+		code, body := e.post(e.api+"/report", Report{Hostname: host, NodeType: fleet.NodeTypeNomadQEMU, OSVersion: osVersion,
+			QEMUVersion: "10.1.0", NomadVersion: "2.0.7", BootTime: e.now.Add(-time.Hour), State: "idle", Nomad: n})
+		if code != 200 {
+			t.Fatalf("report %s: %d %s", host, code, body)
+		}
+		var d fleet.Desired
+		_ = json.Unmarshal(body, &d)
+		return d
+	}
+
+	d := report("n1", "v20260324-1", ready())
+	if d.OSImage != fleet.DefaultNomadQEMUImage || d.OSVersion != "v20261024-1" || d.DockerVersion != "" || !d.Standalone ||
+		len(d.MaintenanceReasons) != 1 || d.MaintenanceReasons[0] != fleet.ReasonOSUpgrade {
+		t.Fatalf("Nomad QEMU nodes get no BurmillaOS or Docker settings: %+v", d)
+	}
+	if d := report("n2", "v20261024-1", ready()); d.MaintenanceRequired {
+		t.Fatalf("up to date node: %+v", d)
+	}
+
+	// A drained node elsewhere in the group blocks the drain of another.
+	drained := ready()
+	drained.Eligibility, drained.Drain = "ineligible", true
+	report("n2", "v20261024-1", drained)
+	if ok, msg := e.lock("n1"); ok || msg != "Nomad node n2 is draining" {
+		t.Fatalf("draining peer must block: %v %s", ok, msg)
+	}
+	report("n2", "v20261024-1", ready())
+	if ok, msg := e.lock("n1"); !ok {
+		t.Fatalf("healthy group should grant the lock: %s", msg)
+	}
+
+	// Back on the target version, but still ineligible: the lock stays.
+	n := ready()
+	n.Eligibility = "ineligible"
+	report("n1", "v20261024-1", n)
+	if _, held := e.s.Store.Locks(e.now)["n1"]; !held {
+		t.Fatal("lock released before the node is eligible again")
+	}
+	report("n1", "v20261024-1", ready())
+	if _, held := e.s.Store.Locks(e.now)["n1"]; held {
+		t.Fatal("lock not released after the node is back")
+	}
+
+	// A peer which stopped reporting blocks too.
+	report("n1", "v20260324-1", ready())
+	e.now = e.now.Add(20 * time.Minute)
+	report("n1", "v20260324-1", ready())
+	if ok, msg := e.lock("n1"); ok || !strings.Contains(msg, "n2 has not reported") {
+		t.Fatalf("stale peer must block: %v %s", ok, msg)
+	}
+
+	metrics := string(e.get("/metrics"))
+	for _, want := range []string{
+		`burmilla_fleet_server_info{hostname="n1",swarm="nomad",environment="prod",node_type="nomad-qemu-node",os_version="v20260324-1",docker_version="",kernel_version="",client_version="",qemu_version="10.1.0",nomad_version="2.0.7"} 1`,
+		`burmilla_fleet_server_nomad_node{hostname="n1",swarm="nomad",environment="prod",node_type="nomad-qemu-node",status="ready",eligibility="eligible",drain="false"} 1`,
+		`burmilla_fleet_server_nomad_allocations{hostname="n1",swarm="nomad",environment="prod",node_type="nomad-qemu-node"} 3`,
+		`burmilla_fleet_server_desired_info{hostname="n1",swarm="nomad",environment="prod",node_type="nomad-qemu-node",os_version="v20261024-1",docker_version="",upgrade_policy="auto"} 1`,
+	} {
+		if !strings.Contains(metrics, want) {
+			t.Errorf("missing %s", want)
+		}
+	}
+	if strings.Contains(metrics, "nomad-qemu-node\",os_version=\"v3.0.0\"") {
+		t.Error("BurmillaOS target version leaked to a Nomad QEMU node")
+	}
+}
