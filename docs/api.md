@@ -69,8 +69,10 @@ Response `200`:
     "password_authentication": false,
     "disable_after_boot": "10m0s"
   },
+  "console_access": false,
   "config_revision": "3f2c1a9...",
   "ssh_in_sync": true,
+  "console_access_in_sync": true,
   "restart_required": false,
   "maintenance_required": true,
   "maintenance_reasons": ["os_upgrade"]
@@ -106,6 +108,11 @@ Response `200`:
   sshd once the server has been up this long and no SSH session is active.
   `0s` enables sshd.
 * `ssh_in_sync` tells whether the SSH state of the last report matches `ssh`.
+* `console_access` is `false` to disable sshd and the tty logins of the
+  console (`ros console access disable`, kept across reboots), `true` to
+  enable them and `null` when not managed. Applied right away, without a
+  maintenance lock. `console_access_in_sync` tells whether the last report
+  matches it (always `true` when not managed).
 
 `400` if `hostname` is missing. `503` if no configuration has been loaded yet.
 
@@ -150,7 +157,8 @@ Clients report their current state. Body:
     "authorized_keys": ["ssh-ed25519 AAAA... alice@example.com"],
     "password_authentication": false,
     "disabled": true
-  }
+  },
+  "console_access": false
 }
 ```
 
@@ -175,6 +183,10 @@ maintenance.
 (`null` when it does not manage keys) and whether sshd accepts passwords
 (`sshd -T`), and `disabled` when sshd is disabled
 (`ros console sshd status`). It is omitted when the client could not read it.
+
+`console_access` is whether sshd and the tty logins of the console are
+enabled (`ros console access status`). It is omitted by BurmillaOS versions
+without `ros console access`.
 
 `node_type` is empty (or left out) for BurmillaOS. Nomad QEMU nodes send
 `nomad-qemu-node`, `os_version` is their image tag, no `docker_version`,

@@ -38,6 +38,11 @@ defaults:
     # Hardening: stop sshd 10 minutes after boot, as soon as no SSH session
     # is active. sshd starts again after a reboot, or right away with "0".
     disable_after_boot: 10m
+  # No logins at all on servers which are managed only through BurFleet and
+  # the Docker API: sshd and the tty logins of the console stay off, also
+  # after reboots (ros console access disable). The console container keeps
+  # running for User Docker. Leave it out to not manage it.
+  console_access: false
 
 # Per-server settings of servers which are not in any Swarm.
 servers:

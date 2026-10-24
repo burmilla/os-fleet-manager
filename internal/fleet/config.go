@@ -57,6 +57,11 @@ type Settings struct {
 	// SSH access of the rancher and docker users. Changes are applied by
 	// fleet-client right away, they do not need a maintenance lock.
 	SSH *SSH `yaml:"ssh,omitempty"`
+	// ConsoleAccess enables (true) or disables (false) interactive access
+	// to the console: sshd and the tty logins (ros console access). The
+	// console container keeps running for User Docker. Applied right away,
+	// kept across reboots. nil is not managed.
+	ConsoleAccess *bool `yaml:"console_access,omitempty"`
 }
 
 // SSH settings. Unset fields are not managed by fleet-client.
@@ -286,10 +291,12 @@ type Desired struct {
 	MaxUptimeSeconds           int64              `json:"max_uptime_seconds"`
 	RestartAfter               string             `json:"restart_after"`
 	SSH                        SSH                `json:"ssh"`
+	ConsoleAccess              *bool              `json:"console_access"`
 	ConfigRevision             string             `json:"config_revision"`
 
 	// Filled in from the last report of the server.
 	SSHInSync           bool     `json:"ssh_in_sync"`
+	ConsoleAccessInSync bool     `json:"console_access_in_sync"`
 	RestartRequired     bool     `json:"restart_required"`
 	MaintenanceRequired bool     `json:"maintenance_required"`
 	MaintenanceReasons  []string `json:"maintenance_reasons"`
@@ -352,6 +359,12 @@ func (d *Desired) CheckSSH(reported *SSH) {
 	}
 }
 
+// CheckConsoleAccess compares the console access state reported by the
+// server with the desired one. Unmanaged is always in sync.
+func (d *Desired) CheckConsoleAccess(reported *bool) {
+	d.ConsoleAccessInSync = d.ConsoleAccess == nil || (reported != nil && *reported == *d.ConsoleAccess)
+}
+
 // ParseDuration is time.ParseDuration with support for a "d" (days) suffix.
 func ParseDuration(s string) (time.Duration, error) {
 	if n, ok := strings.CutSuffix(s, "d"); ok {
@@ -407,6 +420,9 @@ func merge(dst *Settings, src Settings) {
 			ssh.DisableAfterBoot = src.SSH.DisableAfterBoot
 		}
 		dst.SSH = &ssh
+	}
+	if src.ConsoleAccess != nil {
+		dst.ConsoleAccess = src.ConsoleAccess
 	}
 }
 
@@ -478,8 +494,10 @@ func (c *Config) ResolveNode(hostname, swarm, environment, nodeType string, now 
 		MaxConcurrentMaintenance: s.MaxConcurrentMaintenance,
 		MaxUptimeSeconds:         int64(maxUptime.Seconds()),
 		RestartAfter:             s.RestartAfter,
+		ConsoleAccess:            s.ConsoleAccess,
 		ConfigRevision:           c.Revision,
 		SSHInSync:                true,
+		ConsoleAccessInSync:      true,
 		MaintenanceReasons:       []string{},
 	}
 	if s.SSH != nil {
