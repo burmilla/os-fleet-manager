@@ -7,6 +7,8 @@ import (
 	"slices"
 	"sort"
 	"strings"
+
+	"github.com/burmilla/os-fleet-manager/internal/fleet"
 )
 
 // Metrics are written by hand in the Prometheus text format to keep the
@@ -77,6 +79,8 @@ func (s *Server) handleMetrics(w http.ResponseWriter, r *http.Request) {
 		swSvcs   = &metric{name: "burmilla_fleet_swarm_services", help: "Swarm services by readiness as seen by the freshest manager report.", typ: "gauge"}
 		svcRun   = &metric{name: "burmilla_fleet_swarm_service_running_tasks", help: "Running tasks of Swarm services which are not ready.", typ: "gauge"}
 		svcWant  = &metric{name: "burmilla_fleet_swarm_service_desired_tasks", help: "Desired tasks of Swarm services which are not ready.", typ: "gauge"}
+		nomad    = &metric{name: "burmilla_fleet_server_nomad_node", help: "Nomad node status of a Nomad QEMU node.", typ: "gauge"}
+		allocs   = &metric{name: "burmilla_fleet_server_nomad_allocations", help: "Running Nomad allocations on a Nomad QEMU node.", typ: "gauge"}
 	)
 
 	s.syncMu.Lock()
@@ -94,6 +98,9 @@ func (s *Server) handleMetrics(w http.ResponseWriter, r *http.Request) {
 	for _, st := range s.statuses() {
 		d := st.Desired
 		base := [][2]string{{"hostname", st.Hostname}, {"swarm", d.Swarm}, {"environment", d.Environment}}
+		if d.NodeType != "" {
+			base = append(base, [2]string{"node_type", d.NodeType})
+		}
 		with := func(extra ...[2]string) [][2]string {
 			return append(append([][2]string{}, base...), extra...)
 		}
@@ -116,12 +123,24 @@ func (s *Server) handleMetrics(w http.ResponseWriter, r *http.Request) {
 			continue
 		}
 		rep := st.Reported
-		info.add(with(
+		infoLabels := with(
 			[2]string{"os_version", rep.OSVersion},
 			[2]string{"docker_version", rep.DockerVersion},
 			[2]string{"kernel_version", rep.KernelVersion},
 			[2]string{"client_version", rep.ClientVersion},
-		), 1)
+		)
+		if d.NodeType == fleet.NodeTypeNomadQEMU {
+			infoLabels = append(infoLabels, [2]string{"qemu_version", rep.QEMUVersion}, [2]string{"nomad_version", rep.NomadVersion})
+		}
+		info.add(infoLabels, 1)
+		if n := rep.Nomad; n != nil {
+			nomad.add(with(
+				[2]string{"status", n.Status},
+				[2]string{"eligibility", n.Eligibility},
+				[2]string{"drain", fmt.Sprint(n.Drain)},
+			), 1)
+			allocs.add(base, float64(n.Allocations))
+		}
 		lastSeen.add(base, float64(st.LastSeen.Unix()))
 		upToDate.add(base, b2f(st.UpToDate))
 		restart.add(base, b2f(d.RestartRequired))
@@ -176,7 +195,7 @@ func (s *Server) handleMetrics(w http.ResponseWriter, r *http.Request) {
 	}
 
 	w.Header().Set("Content-Type", "text/plain; version=0.0.4; charset=utf-8")
-	for _, m := range []*metric{syncTime, syncOK, syncFail, revision, info, desired, lastSeen, upToDate, window, state, boot, restart, pending, ctrs, ctrBad, sshSync, sshPass, sshOff, lockHeld, locks, swHealth, swReason, swNodes, swMgrs, swSvcs, svcRun, svcWant} {
+	for _, m := range []*metric{syncTime, syncOK, syncFail, revision, info, desired, lastSeen, upToDate, window, state, boot, restart, pending, ctrs, ctrBad, sshSync, sshPass, sshOff, lockHeld, locks, swHealth, swReason, swNodes, swMgrs, swSvcs, svcRun, svcWant, nomad, allocs} {
 		m.write(w)
 	}
 }

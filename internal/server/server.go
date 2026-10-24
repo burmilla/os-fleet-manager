@@ -97,7 +97,7 @@ func lockGroup(d fleet.Desired) string {
 // environment and evaluates it against its last report.
 func (s *Server) desired(cfg *fleet.Config, hostname, swarm, environment string, records map[string]record, now time.Time) fleet.Desired {
 	rec, ok := records[hostname]
-	d := cfg.Resolve(hostname, swarm, environment, now)
+	d := cfg.ResolveNode(hostname, swarm, environment, rec.Report.NodeType, now)
 	if ok {
 		d.Evaluate(rec.Report.OSVersion, rec.Report.DockerVersion, rec.Report.BootTime, now)
 		d.CheckSSH(rec.Report.SSH)

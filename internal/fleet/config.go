@@ -25,6 +25,13 @@ const (
 
 	DefaultOSImage       = "burmilla/os"
 	DefaultCheckInterval = 5 * time.Minute
+
+	// NodeTypeNomadQEMU is reported by the fleet-client of Nomad QEMU nodes
+	// (https://github.com/olljanat/nomad-qemu-node). Servers without a
+	// node type run BurmillaOS.
+	NodeTypeNomadQEMU = "nomad-qemu-node"
+	// DefaultNomadQEMUImage is the os_image of Nomad QEMU nodes.
+	DefaultNomadQEMUImage = "ghcr.io/olljanat/nomad-qemu-node"
 )
 
 // Settings can be defined on every level of the configuration:
@@ -263,6 +270,7 @@ type Desired struct {
 	Hostname                   string             `json:"hostname"`
 	Swarm                      string             `json:"swarm"`
 	Environment                string             `json:"environment"`
+	NodeType                   string             `json:"node_type,omitempty"`
 	Known                      bool               `json:"known"`
 	Standalone                 bool               `json:"standalone"`
 	OSImage                    string             `json:"os_image"`
@@ -402,16 +410,30 @@ func merge(dst *Settings, src Settings) {
 	}
 }
 
-// Resolve returns the desired state of a server which is a member of the
-// given Swarm and environment (empty: not in a Swarm).
+// Resolve returns the desired state of a BurmillaOS server which is a
+// member of the given Swarm and environment (empty: not in a Swarm).
 func (c *Config) Resolve(hostname, swarm, environment string, now time.Time) Desired {
+	return c.ResolveNode(hostname, swarm, environment, "", now)
+}
+
+// ResolveNode is Resolve for a server of the given node type. Nomad QEMU
+// nodes do not take os_image and os_version from defaults (they describe
+// BurmillaOS), do not run User Docker and are never members of a Docker
+// Swarm, so their group is handled like a standalone one.
+func (c *Config) ResolveNode(hostname, swarm, environment, nodeType string, now time.Time) Desired {
+	nomad := nodeType == NodeTypeNomadQEMU
 	s := Settings{
 		OSImage:                  DefaultOSImage,
 		UpgradePolicy:            PolicyNone,
 		MaxConcurrentMaintenance: 1,
 		CheckInterval:            DefaultCheckInterval.String(),
 	}
-	merge(&s, c.Defaults)
+	defaults := c.Defaults
+	if nomad {
+		s.OSImage = DefaultNomadQEMUImage
+		defaults.OSImage, defaults.OSVersion = "", ""
+	}
+	merge(&s, defaults)
 	known := false
 	if swarm == "" {
 		if srv, ok := c.Servers[hostname]; ok {
@@ -434,14 +456,19 @@ func (c *Config) Resolve(hostname, swarm, environment string, now time.Time) Des
 		}
 	}
 
+	if nomad {
+		s.DockerVersion = ""
+	}
+
 	interval, _ := time.ParseDuration(s.CheckInterval)
 	maxUptime, _ := ParseDuration(s.MaxUptime)
 	d := Desired{
 		Hostname:                 hostname,
 		Swarm:                    swarm,
 		Environment:              environment,
+		NodeType:                 nodeType,
 		Known:                    known,
-		Standalone:               c.Swarms[swarm].Standalone,
+		Standalone:               c.Swarms[swarm].Standalone || (nomad && swarm != ""),
 		OSImage:                  s.OSImage,
 		OSVersion:                s.OSVersion,
 		DockerVersion:            s.DockerVersion,

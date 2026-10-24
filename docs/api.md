@@ -116,6 +116,7 @@ Clients report their current state. Body:
 ```json
 {
   "hostname": "node-01",
+  "node_type": "",
   "os_version": "v3.0.0",
   "docker_version": "docker-29.9.2",
   "kernel_version": "6.12.50-burmilla",
@@ -175,6 +176,32 @@ maintenance.
 (`sshd -T`), and `disabled` when sshd is disabled
 (`ros console sshd status`). It is omitted when the client could not read it.
 
+`node_type` is empty (or left out) for BurmillaOS. Nomad QEMU nodes send
+`nomad-qemu-node`, `os_version` is their image tag, no `docker_version`,
+`swarm_status`, `containers` or `ssh`, but:
+
+```json
+{
+  "node_type": "nomad-qemu-node",
+  "os_version": "v20261024-1",
+  "qemu_version": "10.1.0",
+  "nomad_version": "2.0.7",
+  "nomad": {
+    "node_id": "f2b1...",
+    "status": "ready",
+    "eligibility": "eligible",
+    "drain": false,
+    "allocations": 12
+  }
+}
+```
+
+For them `os_image` / `os_version` of `defaults` are not used (`os_image`
+defaults to `ghcr.io/olljanat/nomad-qemu-node`), `docker_version` is always
+empty and their group counts as `standalone`. `nomad` is omitted when the
+client cannot read the Nomad node (e.g. no ACL token); such reports do not
+block maintenance.
+
 `state` is one of `idle`, `downloading`, `upgrading`, `waiting`, `error`
 (free text is accepted, these are the values the bundled client sends).
 
@@ -216,6 +243,11 @@ The lock is granted only when all of these hold:
 
 Servers that are not part of a Swarm (`/api/v1`) and members of a standalone
 group only need 1 and 2, and their own local containers to be ready.
+A Nomad QEMU node in a group additionally needs every other Nomad QEMU node
+of the group that does not hold a lock to have reported within 3 × its check
+interval + 1 minute, not report `state: error`, and have a Nomad node which
+is `ready`, `eligible` and not draining. Its own lock is released only once
+its Nomad node is like that again.
 
 * `200` – granted (or renewed if the host already held it):
   `{"granted": true, "expires": "2026-10-25T00:30:00Z", "holders": ["node-01"]}`

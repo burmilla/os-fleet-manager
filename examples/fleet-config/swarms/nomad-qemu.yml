@@ -1,0 +1,20 @@
+# Nomad QEMU nodes (https://github.com/olljanat/nomad-qemu-node), owned by
+# the virtualization team. Their fleet-client reports node_type
+# nomad-qemu-node, so os_image / os_version of defaults (BurmillaOS) and
+# docker_version do not apply. Their group is a standalone one (no Docker
+# Swarm). Before a node is drained and upgraded, all other nodes of the group must
+# be ready and eligible in Nomad. Clients use FLEET_GROUP=nomad-qemu and
+# FLEET_ENVIRONMENT=prod.
+standalone: true
+os_image: ghcr.io/olljanat/nomad-qemu-node
+os_version: v20261024-1
+upgrade_policy: auto
+max_uptime: 90d
+maintenance_window:
+  days: [sat]
+  start: "01:00"
+  duration: 5h
+  timezone: Europe/Helsinki
+environments:
+  prod:
+    max_concurrent_maintenance: 1

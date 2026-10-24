@@ -148,6 +148,57 @@ func containerProblem(hostname string, cs *ContainerStatus) error {
 	return fmt.Errorf("%s", msg)
 }
 
+// nomadProblem tells why the Nomad node of a Nomad QEMU node blocks
+// maintenance: it must be ready, eligible for scheduling and not
+// draining. Reports without Nomad status (no ACL token, BurmillaOS) do not
+// block.
+func nomadProblem(hostname string, st *NomadStatus) error {
+	switch {
+	case st == nil:
+		return nil
+	case st.Status != "ready":
+		return fmt.Errorf("Nomad node %s is %s", hostname, st.Status)
+	case st.Drain:
+		return fmt.Errorf("Nomad node %s is draining", hostname)
+	case st.Eligibility != "eligible":
+		return fmt.Errorf("Nomad node %s is not eligible for scheduling", hostname)
+	}
+	return nil
+}
+
+// nomadGroupProblem checks the other Nomad QEMU nodes of the group of a
+// Nomad QEMU node before it is drained: every one which does not hold a
+// maintenance lock must report, not be in error and have a Nomad node
+// which is ready and eligible, so that the VMs have somewhere to go.
+func (s *Server) nomadGroupProblem(cfg *fleet.Config, d fleet.Desired, hostname string, locks map[string]Lock, records map[string]record, now time.Time) error {
+	if d.NodeType != fleet.NodeTypeNomadQEMU || d.Swarm == "" {
+		return nil
+	}
+	hosts := make([]string, 0, len(records))
+	for h := range records {
+		hosts = append(hosts, h)
+	}
+	sort.Strings(hosts)
+	for _, h := range hosts {
+		rec := records[h]
+		rep := rec.Report
+		if _, held := locks[h]; held || h == hostname || rep.Swarm != d.Swarm || rep.NodeType != fleet.NodeTypeNomadQEMU {
+			continue
+		}
+		md := s.desired(cfg, h, rep.Swarm, rep.Environment, records, now)
+		if now.Sub(rec.LastSeen) > staleAfter(md) {
+			return fmt.Errorf("%s has not reported since %s", h, rec.LastSeen.UTC().Format(time.RFC3339))
+		}
+		if rep.State == "error" {
+			return fmt.Errorf("%s reports error: %s", h, rep.Message)
+		}
+		if err := nomadProblem(h, rep.Nomad); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
 // localProblem checks a server outside of a Swarm: its own last report.
 func localProblem(hostname string, records map[string]record) error {
 	rec, ok := records[hostname]
@@ -160,7 +211,10 @@ func localProblem(hostname string, records map[string]record) error {
 // canStartMaintenance decides if hostname may take a maintenance lock.
 func (s *Server) canStartMaintenance(cfg *fleet.Config, d fleet.Desired, hostname string, locks map[string]Lock, records map[string]record, now time.Time) error {
 	if d.Swarm == "" || d.Standalone {
-		return localProblem(hostname, records)
+		if err := localProblem(hostname, records); err != nil {
+			return err
+		}
+		return s.nomadGroupProblem(cfg, d, hostname, locks, records, now)
 	}
 	ignore := map[string]bool{}
 	for h := range locks {
@@ -191,10 +245,14 @@ func (s *Server) canStartMaintenance(cfg *fleet.Config, d fleet.Desired, hostnam
 
 // canFinishMaintenance decides if the lock of hostname can be released:
 // the server must be back in the Swarm and the whole Swarm healthy, and
-// its local containers ready.
+// its local containers ready. A Nomad QEMU node must be back in Nomad.
 func (s *Server) canFinishMaintenance(cfg *fleet.Config, d fleet.Desired, hostname string, now time.Time) error {
 	if d.Swarm == "" || d.Standalone {
-		return localProblem(hostname, s.Store.Records())
+		records := s.Store.Records()
+		if err := localProblem(hostname, records); err != nil {
+			return err
+		}
+		return nomadProblem(hostname, records[hostname].Report.Nomad)
 	}
 	ignore := map[string]bool{}
 	for h := range s.Store.Locks(now) {
