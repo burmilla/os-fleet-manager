@@ -1184,6 +1184,194 @@
           }
         }
       ]
+    },
+    {
+      "id": 17,
+      "title": "SSH",
+      "type": "table",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "${datasource}"
+      },
+      "gridPos": {
+        "x": 0,
+        "y": 45,
+        "w": 24,
+        "h": 8
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${datasource}"
+          },
+          "expr": "max by (hostname) (burmilla_fleet_server_ssh_in_sync{node_type=\"nomad-qemu-node\",swarm=~\"$group\",environment=~\"$environment\"})",
+          "refId": "A",
+          "format": "table",
+          "instant": true
+        },
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${datasource}"
+          },
+          "expr": "max by (hostname) (burmilla_fleet_server_ssh_password_authentication{node_type=\"nomad-qemu-node\",swarm=~\"$group\",environment=~\"$environment\"})",
+          "refId": "B",
+          "format": "table",
+          "instant": true
+        },
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${datasource}"
+          },
+          "expr": "max by (hostname) (burmilla_fleet_server_ssh_disabled{node_type=\"nomad-qemu-node\",swarm=~\"$group\",environment=~\"$environment\"})",
+          "refId": "C",
+          "format": "table",
+          "instant": true
+        }
+      ],
+      "description": "Managed root SSH keys and password setting applied (in sync), whether sshd accepts passwords and whether it is stopped by ssh.disable_after_boot.",
+      "options": {
+        "showHeader": true,
+        "sortBy": [
+          {
+            "displayName": "Node",
+            "desc": false
+          }
+        ]
+      },
+      "fieldConfig": {
+        "defaults": {},
+        "overrides": [
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "In sync"
+            },
+            "properties": [
+              {
+                "id": "mappings",
+                "value": [
+                  {
+                    "type": "value",
+                    "options": {
+                      "0": {
+                        "text": "no",
+                        "color": "red",
+                        "index": 0
+                      },
+                      "1": {
+                        "text": "yes",
+                        "color": "green",
+                        "index": 1
+                      }
+                    }
+                  }
+                ]
+              },
+              {
+                "id": "custom.cellOptions",
+                "value": {
+                  "type": "color-text"
+                }
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "Password logins"
+            },
+            "properties": [
+              {
+                "id": "mappings",
+                "value": [
+                  {
+                    "type": "value",
+                    "options": {
+                      "0": {
+                        "text": "no",
+                        "color": "green",
+                        "index": 0
+                      },
+                      "1": {
+                        "text": "yes",
+                        "color": "orange",
+                        "index": 1
+                      }
+                    }
+                  }
+                ]
+              },
+              {
+                "id": "custom.cellOptions",
+                "value": {
+                  "type": "color-text"
+                }
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "sshd stopped"
+            },
+            "properties": [
+              {
+                "id": "mappings",
+                "value": [
+                  {
+                    "type": "value",
+                    "options": {
+                      "0": {
+                        "text": "no",
+                        "index": 0
+                      },
+                      "1": {
+                        "text": "yes",
+                        "index": 1
+                      }
+                    }
+                  }
+                ]
+              }
+            ]
+          }
+        ]
+      },
+      "transformations": [
+        {
+          "id": "joinByField",
+          "options": {
+            "byField": "hostname",
+            "mode": "outer"
+          }
+        },
+        {
+          "id": "organize",
+          "options": {
+            "excludeByName": {
+              "Time": true,
+              "Time 1": true,
+              "Time 2": true,
+              "Time 3": true
+            },
+            "indexByName": {
+              "hostname": 0,
+              "Value #A": 1,
+              "Value #B": 2,
+              "Value #C": 3
+            },
+            "renameByName": {
+              "hostname": "Node",
+              "Value #A": "In sync",
+              "Value #B": "Password logins",
+              "Value #C": "sshd stopped"
+            }
+          }
+        }
+      ]
     }
   ]
 }

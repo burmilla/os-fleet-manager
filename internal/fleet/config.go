@@ -54,8 +54,9 @@ type Settings struct {
 	// RestartAfter requests a one-off restart: servers booted before this
 	// time (RFC 3339) restart in their next maintenance window.
 	RestartAfter string `yaml:"restart_after,omitempty"`
-	// SSH access of the rancher and docker users. Changes are applied by
-	// fleet-client right away, they do not need a maintenance lock.
+	// SSH access of the rancher and docker users (root on Nomad QEMU
+	// nodes). Changes are applied by fleet-client right away, they do not
+	// need a maintenance lock.
 	SSH *SSH `yaml:"ssh,omitempty"`
 }
 

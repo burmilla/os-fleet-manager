@@ -51,7 +51,7 @@ inherited `defaults` < `swarms.<swarm>` < `swarms.<swarm>.environments.<env>`
 | `max_uptime`                 | Scheduled restart when uptime exceeds this, e.g. `30d` or `720h` |
 | `restart_after`              | One-off restart: servers booted before this RFC 3339 time restart in their next window |
 | `check_interval`             | How often clients check in, default `5m` |
-| `ssh.authorized_keys`        | SSH public keys of the `rancher` and `docker` users managed by fleet-client. The list of the most specific level wins. `[]` removes all managed keys, unset = not managed |
+| `ssh.authorized_keys`        | SSH public keys of the `rancher` and `docker` users (`root` on Nomad QEMU nodes) managed by fleet-client. The list of the most specific level wins. `[]` removes all managed keys, unset = not managed |
 | `ssh.password_authentication`| `true` / `false` enables or disables password logins in sshd. Unset = not managed |
 | `ssh.disable_after_boot`     | Hardening: stop sshd once the server has been up this long (e.g. `10m`) and no SSH session is active. `0` = enable sshd, unset = not managed |
 
@@ -228,7 +228,9 @@ swarms:
 
 * `os_image` and `os_version` of `defaults` describe BurmillaOS and are not
   applied to them; `os_image` defaults to `ghcr.io/olljanat/nomad-qemu-node`.
-  `docker_version` and `ssh` do not apply.
+  `docker_version` does not apply. `ssh` settings apply to `root`
+  (fleet-client of nomad-qemu-node with SSH support): keys go to
+  `/root/.ssh/authorized_keys`, `disable_after_boot` stops `ssh.socket`.
 * Mark their group `standalone: true` (a reporting Nomad QEMU node is
   handled as standalone anyway, but servers listed in the group which have
   not reported yet would otherwise count as Swarm members). Instead of the
