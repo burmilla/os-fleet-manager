@@ -276,7 +276,7 @@ included.
 docker run -d --name fleet-manager -p 8080:8080 -v fleet-data:/data \
   -e FLEET_GIT_URL=https://github.com/example/fleet-config.git \
   -e FLEET_GIT_TOKEN=github_pat_... \
-  burmilla/os-fleet-manager:v1.2.1
+  burmilla/os-fleet-manager:v1.3.0
 ```
 
 For Docker Swarm see [deploy/docker-stack.yml](deploy/docker-stack.yml). It runs
