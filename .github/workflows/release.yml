@@ -4,12 +4,21 @@ on:
   push:
     tags:
       - 'v*'
+  workflow_call:
+    inputs:
+      version:
+        required: true
+        type: string
 
 jobs:
   build:
     runs-on: ubuntu-latest
+    env:
+      VERSION: ${{ inputs.version || github.ref_name }}
     steps:
     - uses: actions/checkout@v4
+      with:
+        ref: ${{ env.VERSION }}
 
     - uses: docker/setup-qemu-action@v3
     - uses: docker/setup-buildx-action@v3
@@ -21,7 +30,7 @@ jobs:
       run: |
         docker buildx build --push \
           --platform linux/amd64,linux/arm64 \
-          --build-arg VERSION=${GITHUB_REF_NAME} \
-          -t burmilla/os-fleet-manager:${GITHUB_REF_NAME} \
+          --build-arg VERSION=${VERSION} \
+          -t burmilla/os-fleet-manager:${VERSION} \
           -t burmilla/os-fleet-manager:latest \
           .
