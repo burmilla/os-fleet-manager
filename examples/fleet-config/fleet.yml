@@ -27,10 +27,10 @@ defaults:
     start: "02:00"
     duration: 3h
     timezone: Europe/Helsinki
-  # SSH access of the rancher and docker users, applied by fleet-client
-  # right away (no maintenance lock needed). authorized_keys replaces the
-  # keys managed by fleet-client; keys from cloud-config or added by hand
-  # are kept. Leave a setting out to not manage it at all.
+  # SSH access of the rancher and docker users (root on Nomad QEMU nodes),
+  # applied by fleet-client right away (no maintenance lock needed).
+  # authorized_keys replaces the keys managed by fleet-client; keys from
+  # cloud-config or added by hand are kept. Leave a setting out to not manage it at all.
   ssh:
     authorized_keys:
       - ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIOiuTuZpapVCjAUUGcXj2zMLBbrr0QyMsca1UEx+EBWQ alice@example.com

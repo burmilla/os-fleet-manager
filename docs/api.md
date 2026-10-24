@@ -99,7 +99,7 @@ Response `200`:
   than `max_uptime_seconds`, or when it booted before `restart_after` (a
   one-off restart request) and that time has passed.
 * `ssh.authorized_keys` is the complete list of keys the client manages for
-  the `rancher` and `docker` users; `null` means "do not manage keys" and `[]`
+  the `rancher` and `docker` users (`root` on Nomad QEMU nodes); `null` means "do not manage keys" and `[]`
   removes all managed keys. `ssh.password_authentication` is `null` when not
   managed. SSH settings are applied right away, without a maintenance lock.
 * `ssh.disable_after_boot` (Go duration, omitted when not managed): stop
