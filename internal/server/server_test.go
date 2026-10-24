@@ -622,3 +622,39 @@ swarms:
 		t.Error("BurmillaOS target version leaked to a Nomad QEMU node")
 	}
 }
+
+func TestRAIDStatus(t *testing.T) {
+	e := newEnv(t)
+	cfg, _ := fleet.Parse([]byte("defaults: {}"))
+	e.s.SetConfig(cfg)
+	raid := []RAIDArray{
+		{Name: "md0", Level: "raid1", State: "active", Devices: 2, ActiveDevices: 2},
+		{Name: "md1", Level: "raid1", State: "active", Devices: 2, ActiveDevices: 1, Degraded: true,
+			FailedDevices: []string{"sdb3"}, SpareDevices: []string{"sdc1"}, SyncAction: "recovery", SyncProgress: 12.6},
+	}
+	if code, body := e.post("/api/v1/report", Report{Hostname: "n1", NodeType: fleet.NodeTypeNomadQEMU, RAID: raid}); code != 200 {
+		t.Fatalf("report: %d %s", code, body)
+	}
+	metrics := string(e.get("/metrics"))
+	base := `hostname="n1",swarm="",environment="",node_type="nomad-qemu-node",array=`
+	for _, want := range []string{
+		`burmilla_fleet_server_raid_array{` + base + `"md0",level="raid1",state="active"} 1`,
+		`burmilla_fleet_server_raid_degraded{` + base + `"md0"} 0`,
+		`burmilla_fleet_server_raid_degraded{` + base + `"md1"} 1`,
+		`burmilla_fleet_server_raid_devices{` + base + `"md1",state="active"} 1`,
+		`burmilla_fleet_server_raid_devices{` + base + `"md1",state="missing"} 1`,
+		`burmilla_fleet_server_raid_devices{` + base + `"md1",state="failed"} 1`,
+		`burmilla_fleet_server_raid_devices{` + base + `"md1",state="spare"} 1`,
+		`burmilla_fleet_server_raid_sync_progress_percent{` + base + `"md1",action="recovery"} 12.6`,
+	} {
+		if !strings.Contains(metrics, want) {
+			t.Errorf("missing %s", want)
+		}
+	}
+	if strings.Contains(metrics, `raid_sync_progress_percent{`+base+`"md0"`) {
+		t.Error("no sync progress for an idle array")
+	}
+	if !strings.Contains(string(e.get("/api/v1/servers")), `"failed_devices":["sdb3"]`) {
+		t.Error("RAID status missing from /api/v1/servers")
+	}
+}
