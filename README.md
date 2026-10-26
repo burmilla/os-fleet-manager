@@ -53,7 +53,6 @@ inherited `defaults` < `swarms.<swarm>` < `swarms.<swarm>.environments.<env>`
 | `check_interval`             | How often clients check in, default `5m` |
 | `ssh.authorized_keys`        | SSH public keys of the `rancher` and `docker` users (`root` on Nomad QEMU nodes) managed by fleet-client. The list of the most specific level wins. `[]` removes all managed keys, unset = not managed |
 | `ssh.password_authentication`| `true` / `false` enables or disables password logins in sshd. Unset = not managed |
-| `ssh.disable_after_boot`     | Hardening: stop sshd once the server has been up this long (e.g. `10m`) and no SSH session is active. `0` = enable sshd, unset = not managed |
 
 A server's Swarm and Environment come only from the client: fleet-client
 calls `/api/v1/swarms/<FLEET_SWARM>/<FLEET_ENVIRONMENT>/...`. The
@@ -134,14 +133,6 @@ lock, because they do not interrupt running workloads:
 * `password_authentication` is written to
   `/etc/ssh/sshd_config.d/50-burmilla-fleet.conf` in the console container
   and sshd is reloaded. Open sessions are kept.
-
-* `disable_after_boot` stops sshd of the console (`ros console sshd
-  disable --if-idle`) once the server has been up that long and no SSH
-  connection is established. While a session is open fleet-client checks
-  again every minute. sshd starts again after every boot, so SSH is
-  available for the same period after a reboot; `0` enables sshd right away
-  on running servers (console access works as well). Needs a BurmillaOS
-  version with `ros console sshd`.
 
 Make sure servers have working keys before disabling passwords. The applied
 state is reported back and exposed as `burmilla_fleet_server_ssh_in_sync`.
@@ -230,7 +221,7 @@ swarms:
   applied to them; `os_image` defaults to `ghcr.io/olljanat/nomad-qemu-node`.
   `docker_version` does not apply. `ssh` settings apply to `root`
   (fleet-client of nomad-qemu-node with SSH support): keys go to
-  `/root/.ssh/authorized_keys`, `disable_after_boot` stops `ssh.socket`.
+  `/root/.ssh/authorized_keys`.
 * Mark their group `standalone: true` (a reporting Nomad QEMU node is
   handled as standalone anyway, but servers listed in the group which have
   not reported yet would otherwise count as Swarm members). Instead of the
@@ -370,7 +361,6 @@ standalone group, and `/api/v1` for servers outside of them.
 | `burmilla_fleet_server_container_not_ready` | hostname, swarm, environment, container, state, health |
 | `burmilla_fleet_server_ssh_in_sync` | hostname, swarm, environment (managed SSH keys and password setting applied) |
 | `burmilla_fleet_server_ssh_password_authentication` | hostname, swarm, environment (sshd accepts passwords) |
-| `burmilla_fleet_server_ssh_disabled` | hostname, swarm, environment (sshd disabled by `disable_after_boot`) |
 | `burmilla_fleet_server_nomad_node` | hostname, swarm, environment, status, eligibility, drain (Nomad QEMU nodes) |
 | `burmilla_fleet_server_nomad_allocations` | hostname, swarm, environment (running Nomad allocations, Nomad QEMU nodes) |
 | `burmilla_fleet_server_raid_array` | hostname, swarm, environment, array, level, state (software RAID arrays) |

@@ -1219,19 +1219,9 @@
           "refId": "B",
           "format": "table",
           "instant": true
-        },
-        {
-          "datasource": {
-            "type": "prometheus",
-            "uid": "${datasource}"
-          },
-          "expr": "max by (hostname) (burmilla_fleet_server_ssh_disabled{node_type=\"nomad-qemu-node\",swarm=~\"$group\",environment=~\"$environment\"})",
-          "refId": "C",
-          "format": "table",
-          "instant": true
         }
       ],
-      "description": "Managed root SSH keys and password setting applied (in sync), whether sshd accepts passwords and whether it is stopped by ssh.disable_after_boot.",
+      "description": "Managed root SSH keys and password setting applied (in sync) and whether sshd accepts passwords.",
       "options": {
         "showHeader": true,
         "sortBy": [
@@ -1311,32 +1301,6 @@
                 }
               }
             ]
-          },
-          {
-            "matcher": {
-              "id": "byName",
-              "options": "sshd stopped"
-            },
-            "properties": [
-              {
-                "id": "mappings",
-                "value": [
-                  {
-                    "type": "value",
-                    "options": {
-                      "0": {
-                        "text": "no",
-                        "index": 0
-                      },
-                      "1": {
-                        "text": "yes",
-                        "index": 1
-                      }
-                    }
-                  }
-                ]
-              }
-            ]
           }
         ]
       },
@@ -1354,20 +1318,17 @@
             "excludeByName": {
               "Time": true,
               "Time 1": true,
-              "Time 2": true,
-              "Time 3": true
+              "Time 2": true
             },
             "indexByName": {
               "hostname": 0,
               "Value #A": 1,
-              "Value #B": 2,
-              "Value #C": 3
+              "Value #B": 2
             },
             "renameByName": {
               "hostname": "Node",
               "Value #A": "In sync",
-              "Value #B": "Password logins",
-              "Value #C": "sshd stopped"
+              "Value #B": "Password logins"
             }
           }
         }
