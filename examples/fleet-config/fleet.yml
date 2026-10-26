@@ -35,9 +35,6 @@ defaults:
     authorized_keys:
       - ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIOiuTuZpapVCjAUUGcXj2zMLBbrr0QyMsca1UEx+EBWQ alice@example.com
       - ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIL85YGKsHVZg1FilB2p/FQs777cdPnqWtr8rfoKImcUU bob@example.com
-    # Hardening: stop sshd 10 minutes after boot, as soon as no SSH session
-    # is active. sshd starts again after a reboot, or right away with "0".
-    disable_after_boot: 10m
 
 # Per-server settings of servers which are not in any Swarm.
 servers:

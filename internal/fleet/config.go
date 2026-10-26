@@ -68,12 +68,6 @@ type SSH struct {
 	AuthorizedKeys []string `yaml:"authorized_keys" json:"authorized_keys"`
 	// PasswordAuthentication enables or disables password logins in sshd.
 	PasswordAuthentication *bool `yaml:"password_authentication,omitempty" json:"password_authentication"`
-	// DisableAfterBoot hardens the server by stopping sshd once it has
-	// been up this long (e.g. 10m) and no SSH session is active. sshd
-	// starts again after a reboot. "0" enables sshd right away.
-	DisableAfterBoot string `yaml:"disable_after_boot,omitempty" json:"disable_after_boot,omitempty"`
-	// Disabled is reported by the client: sshd is disabled.
-	Disabled bool `yaml:"-" json:"disabled,omitempty"`
 }
 
 // Which Swarm and environment a server belongs to is decided by the
@@ -192,11 +186,6 @@ func (c *Config) Validate() error {
 				}
 				if _, _, _, _, err := ssh.ParseAuthorizedKey([]byte(key)); err != nil {
 					return fmt.Errorf("%s: invalid ssh.authorized_keys entry %q: %w", where, key, err)
-				}
-			}
-			if v := s.SSH.DisableAfterBoot; v != "" {
-				if d, err := time.ParseDuration(v); err != nil || (d != 0 && d < time.Minute) {
-					return fmt.Errorf("%s: invalid ssh.disable_after_boot %q (Go duration, at least 1m, 0 = off)", where, v)
 				}
 			}
 		}
@@ -404,9 +393,6 @@ func merge(dst *Settings, src Settings) {
 		if src.SSH.PasswordAuthentication != nil {
 			ssh.PasswordAuthentication = src.SSH.PasswordAuthentication
 		}
-		if src.SSH.DisableAfterBoot != "" {
-			ssh.DisableAfterBoot = src.SSH.DisableAfterBoot
-		}
 		dst.SSH = &ssh
 	}
 }
@@ -485,9 +471,6 @@ func (c *Config) ResolveNode(hostname, swarm, environment, nodeType string, now 
 	}
 	if s.SSH != nil {
 		d.SSH = *s.SSH
-		if v, err := time.ParseDuration(d.SSH.DisableAfterBoot); err == nil {
-			d.SSH.DisableAfterBoot = v.String()
-		}
 	}
 	if w := s.MaintenanceWindow; w != nil {
 		if end, ok := w.ActiveUntil(now); ok {

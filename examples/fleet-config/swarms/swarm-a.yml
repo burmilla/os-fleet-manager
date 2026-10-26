@@ -14,5 +14,4 @@ environments:
         - ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIL85YGKsHVZg1FilB2p/FQs777cdPnqWtr8rfoKImcUU bob@example.com
         - ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAICqowcCmB15oDTFxpDzpXgVMg73iUgBT4yZHWgHooy+w ci@example.com
       password_authentication: true
-      disable_after_boot: "0"      # sshd stays enabled in test
   # production is in swarms/swarm-a/production.yml
