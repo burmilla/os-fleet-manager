@@ -162,9 +162,11 @@ func validate(args []string) {
 		fmt.Fprintf(os.Stderr, "invalid fleet configuration: %v\n", err)
 		os.Exit(1)
 	}
-	envs := 0
+	// Each swarms: entry is a team and each of its environments is one
+	// Docker Swarm (or standalone group).
+	swarms := 0
 	for _, sw := range cfg.Swarms {
-		envs += len(sw.Environments)
+		swarms += len(sw.Environments)
 	}
-	fmt.Printf("%s is valid: %d swarms, %d environments, %d servers\n", path, len(cfg.Swarms), envs, len(cfg.Listed()))
+	fmt.Printf("%s is valid: %d teams, %d swarms, %d servers\n", path, len(cfg.Swarms), swarms, len(cfg.Listed()))
 }
