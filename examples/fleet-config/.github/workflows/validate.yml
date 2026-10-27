@@ -10,4 +10,4 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-      - run: docker run --rm -v "$PWD:/config:ro" burmilla/os-fleet-manager:v1.4.0 validate /config/fleet.yml
+      - run: docker run --rm -v "$PWD:/config:ro" burmilla/os-fleet-manager:v1.4.1 validate /config/fleet.yml
