@@ -63,6 +63,7 @@ Response `200`:
   "maintenance_window_next_start": "2026-10-24T23:00:00Z",
   "max_concurrent_maintenance": 1,
   "max_uptime_seconds": 7776000,
+  "restart_allowed": true,
   "restart_after": "",
   "ssh": {
     "authorized_keys": ["ssh-ed25519 AAAA... alice@example.com"],
@@ -89,6 +90,12 @@ Response `200`:
     window, after taking a maintenance lock,
   * `download` – only pre-pull the target images,
   * `none` – only report status.
+* `restart_allowed` tells the client whether it may run scheduled restarts
+  (maintenance reason `restart`) inside the maintenance window, after taking
+  a maintenance lock. It is always `true` with `upgrade_policy` `auto`. With
+  `download` and `none` it is `true` when both `maintenance_window` and
+  `max_uptime` are configured; the client then only restarts and leaves
+  `os_upgrade` and `docker_upgrade` pending.
 * `maintenance_window` is `null` when no window is configured. In that case
   `maintenance_window_active` is always `true` (changes are allowed at any time).
 * `maintenance_window_ends` is set while the window is active.

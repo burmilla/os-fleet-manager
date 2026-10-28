@@ -106,6 +106,39 @@ func TestValidation(t *testing.T) {
 	}
 }
 
+func TestRestartAllowed(t *testing.T) {
+	cfg, err := Parse([]byte(`
+defaults: {upgrade_policy: none, os_version: v2.0.6}
+swarms:
+  ACO:
+    environments:
+      opx:
+        maintenance_window: {timezone: CET, days: [wed], start: "02:00", duration: 4h}
+        max_uptime: 1h
+      dev:
+        max_uptime: 1h
+      prod:
+        upgrade_policy: auto
+      test:
+        upgrade_policy: download
+        maintenance_window: {start: "02:00", duration: 4h}
+        max_uptime: 30d
+`))
+	if err != nil {
+		t.Fatal(err)
+	}
+	now := time.Date(2026, 10, 28, 0, 0, 0, 0, time.UTC)
+	for env, want := range map[string]bool{"opx": true, "dev": false, "prod": true, "test": true, "other": false} {
+		d := cfg.Resolve("n1", "ACO", env, now)
+		if d.RestartAllowed != want {
+			t.Errorf("%s: restart_allowed %v, want %v", env, d.RestartAllowed, want)
+		}
+		if env == "opx" && d.UpgradePolicy != PolicyNone {
+			t.Errorf("opx: upgrade_policy %q, want none", d.UpgradePolicy)
+		}
+	}
+}
+
 func TestEvaluate(t *testing.T) {
 	cfg, err := Parse([]byte(`
 defaults: {os_version: v3.0.0, docker_version: docker-29.9.2, max_uptime: 30d}
