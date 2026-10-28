@@ -30,7 +30,7 @@
           "type": "prometheus",
           "uid": "${datasource}"
         },
-        "label": "Swarm",
+        "label": "Team",
         "includeAll": true,
         "multi": true,
         "allValue": ".*",
@@ -51,7 +51,7 @@
           "type": "prometheus",
           "uid": "${datasource}"
         },
-        "label": "Environment",
+        "label": "Swarm",
         "includeAll": true,
         "multi": true,
         "allValue": ".*",
@@ -528,7 +528,8 @@
               "Value #C": "Nodes down",
               "Value #D": "Managers unreachable",
               "Value #E": "Services not ready",
-              "reason": "Problem"
+              "reason": "Problem",
+              "swarm": "Team"
             }
           }
         }
@@ -618,7 +619,7 @@
     },
     {
       "id": 10,
-      "title": "Compliance by Swarm / Environment",
+      "title": "Compliance by Team / Swarm",
       "type": "timeseries",
       "datasource": {
         "type": "prometheus",
@@ -774,7 +775,7 @@
           "instant": true
         }
       ],
-      "description": "Reported (left) and target (right) versions. The join is by hostname/swarm/environment.",
+      "description": "Reported (left) and target (right) versions. The join is by hostname/team/swarm.",
       "options": {
         "showHeader": true
       },
@@ -899,8 +900,8 @@
               "Value #C": "Up to date",
               "Value #D": "Last report",
               "Value #E": "Uptime",
-              "swarm 1": "Swarm",
-              "environment 1": "Environment",
+              "swarm 1": "Team",
+              "environment 1": "Swarm",
               "os_version 1": "OS",
               "os_version 2": "Target OS",
               "docker_version 1": "Docker",
@@ -1080,7 +1081,7 @@
             "renameByName": {
               "Value #A": "Running tasks",
               "Value #B": "Desired tasks",
-              "swarm 1": "Swarm",
+              "swarm 1": "Team",
               "mode 1": "Mode",
               "update_state 1": "Update state"
             }
