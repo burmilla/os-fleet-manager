@@ -45,10 +45,10 @@ inherited `defaults` < `swarms.<swarm>` < `swarms.<swarm>.environments.<env>`
 | `os_image`                   | BurmillaOS image repository, default `burmilla/os` |
 | `os_version`                 | Target BurmillaOS version (image tag), e.g. `v3.0.0`. Empty = not managed |
 | `docker_version`             | Target User Docker engine as listed by `ros engine list`, e.g. `docker-29.9.2`. Empty = not managed |
-| `upgrade_policy`             | `auto` (apply in maintenance window), `download` (pre-pull only) or `none` (report only, the default) |
+| `upgrade_policy`             | `auto` (apply in maintenance window), `download` (pre-pull only) or `none` (report only, the default). With `download` and `none`, `max_uptime` restarts still run when a `maintenance_window` is set |
 | `maintenance_window`         | `days` (`mon`..`sun`, empty = every day), `start` (`HH:MM`), `duration` (Go duration) and `timezone` (IANA, default UTC). No window = any time |
 | `max_concurrent_maintenance` | How many servers of one Swarm + Environment may be in maintenance at once, default 1 |
-| `max_uptime`                 | Scheduled restart when uptime exceeds this, e.g. `30d` or `720h` |
+| `max_uptime`                 | Scheduled restart when uptime exceeds this, e.g. `30d` or `720h`. Together with a `maintenance_window` this works with every `upgrade_policy` |
 | `restart_after`              | One-off restart: servers booted before this RFC 3339 time restart in their next window |
 | `check_interval`             | How often clients check in, default `5m` |
 | `ssh.authorized_keys`        | SSH public keys of the `rancher` and `docker` users (`root` on Nomad QEMU nodes) managed by fleet-client. The list of the most specific level wins. `[]` removes all managed keys, unset = not managed |
@@ -267,7 +267,7 @@ included.
 docker run -d --name fleet-manager -p 8080:8080 -v fleet-data:/data \
   -e FLEET_GIT_URL=https://github.com/example/fleet-config.git \
   -e FLEET_GIT_TOKEN=github_pat_... \
-  burmilla/os-fleet-manager:v1.4.1
+  burmilla/os-fleet-manager:v1.5.0
 ```
 
 For Docker Swarm see [deploy/docker-stack.yml](deploy/docker-stack.yml). It runs

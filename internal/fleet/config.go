@@ -278,6 +278,13 @@ type Desired struct {
 	SSH                        SSH                `json:"ssh"`
 	ConfigRevision             string             `json:"config_revision"`
 
+	// RestartAllowed tells the client that it may run scheduled restarts
+	// in the maintenance window. Always true with upgrade_policy auto. With
+	// the other policies it is true when both a maintenance_window and
+	// max_uptime are configured, so servers which must not be upgraded
+	// can still be restarted regularly.
+	RestartAllowed bool `json:"restart_allowed"`
+
 	// Filled in from the last report of the server.
 	SSHInSync           bool     `json:"ssh_in_sync"`
 	RestartRequired     bool     `json:"restart_required"`
@@ -464,6 +471,7 @@ func (c *Config) ResolveNode(hostname, swarm, environment, nodeType string, now 
 		MaintenanceWindow:        s.MaintenanceWindow,
 		MaxConcurrentMaintenance: s.MaxConcurrentMaintenance,
 		MaxUptimeSeconds:         int64(maxUptime.Seconds()),
+		RestartAllowed:           s.UpgradePolicy == PolicyAuto || (s.MaintenanceWindow != nil && maxUptime > 0),
 		RestartAfter:             s.RestartAfter,
 		ConfigRevision:           c.Revision,
 		SSHInSync:                true,
