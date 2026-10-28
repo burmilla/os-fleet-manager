@@ -30,7 +30,7 @@
           "type": "prometheus",
           "uid": "${datasource}"
         },
-        "label": "Swarm",
+        "label": "Team",
         "includeAll": true,
         "multi": true,
         "allValue": ".*",
@@ -51,7 +51,7 @@
           "type": "prometheus",
           "uid": "${datasource}"
         },
-        "label": "Environment",
+        "label": "Swarm",
         "includeAll": true,
         "multi": true,
         "allValue": ".*",
@@ -553,8 +553,8 @@
               "client_version": 9
             },
             "renameByName": {
-              "swarm 1": "Swarm",
-              "environment 1": "Environment",
+              "swarm 1": "Team",
+              "environment 1": "Swarm",
               "os_version 1": "OS",
               "os_version 2": "Target OS",
               "docker_version 1": "Docker",
